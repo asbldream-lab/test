@@ -179,6 +179,12 @@ func _paintings(w: float, d: float) -> void:
 	var frame_mat := _mat(Color(0.78, 0.6, 0.25), 0.35)
 	frame_mat.metallic = 0.6
 	var doors: Array[Vector2] = [Vector2(_data.entry[0], _data.entry[1]), Vector2(_data.exit[0], _data.exit[1])]
+	# Images fournies (png/jpg/webp) dans res://musee/tableaux/ : accrochées en priorité.
+	var images: Array[Texture2D] = []
+	for f in ResourceLoader.list_directory("res://musee/tableaux/"):
+		if f.get_extension().to_lower() in ["png", "jpg", "jpeg", "webp"]:
+			images.append(load("res://musee/tableaux/" + f))
+	var img_i := current * 5 # chaque niveau commence à une image différente
 	for side in ["N", "S", "E", "W"]:
 		var length := w if side in ["N", "S"] else d
 		var count := int(length / 5.0)
@@ -195,17 +201,28 @@ func _paintings(w: float, d: float) -> void:
 			var holder := Node3D.new()
 			holder.position = pos + inward * 0.04
 			holder.rotation.y = atan2(inward.x, inward.z) # +z local = vers la pièce
+			var tex: Texture2D = null
 			var size := Vector2(rng.randf_range(1.0, 1.8), rng.randf_range(0.8, 1.3))
+			if not images.is_empty():
+				tex = images[img_i % images.size()]
+				img_i += 1
+				var aspect := float(tex.get_width()) / tex.get_height()
+				size = Vector2(1.2 * aspect, 1.2) if aspect <= 1.6 else Vector2(2.0, 2.0 / aspect)
+				size += Vector2(0.16, 0.16) # place du cadre
 			var frame := MeshInstance3D.new()
 			frame.mesh = BoxMesh.new()
 			frame.mesh.size = Vector3(size.x, size.y, 0.06)
 			frame.material_override = frame_mat
 			holder.add_child(frame)
 			var canvas := MeshInstance3D.new()
-			canvas.mesh = BoxMesh.new()
-			canvas.mesh.size = Vector3(size.x - 0.16, size.y - 0.16, 0.01)
-			canvas.position.z = 0.035
-			canvas.material_override = _canvas(rng)
+			canvas.mesh = QuadMesh.new()
+			canvas.mesh.size = size - Vector2(0.16, 0.16)
+			canvas.position.z = 0.031
+			if tex:
+				canvas.material_override = _mat(Color.WHITE, 0.8)
+				canvas.material_override.albedo_texture = tex
+			else:
+				canvas.material_override = _canvas(rng)
 			holder.add_child(canvas)
 			add_child(holder)
 

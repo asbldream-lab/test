@@ -35,6 +35,7 @@ var _timer := 0.0
 var _cooldown := 0.0
 var _move_dir := Vector3.RIGHT
 var _roll_t := 0.0
+var _roll_buffer := false ## Roulade demandée pendant une roulade : enchaînée dès que possible.
 var _roll_speed := 0.0
 var _roll_move_time := 0.0
 var _cam_h := 1.5
@@ -139,8 +140,12 @@ func _state_normal(delta: float) -> void:
 # --- Roulade ---------------------------------------------------------------
 
 func try_roll() -> void:
-	if state != State.NORMAL or _cooldown > 0.0 or not enabled or is_prone:
+	if state == State.ROLL:
+		_roll_buffer = true # enchaînement
 		return
+	if state != State.NORMAL or not enabled or is_prone:
+		return
+	_roll_buffer = false
 	# Vitesse et longueur selon l'élan : marche = roulade douce (~3 m), course = rapide (~4 m).
 	var t := clampf(Vector2(velocity.x, velocity.z).length() / run_speed, 0.0, 1.0)
 	var k := lerpf(1.0, ROLL_ANIM_SPEED, t)
@@ -154,6 +159,14 @@ func try_roll() -> void:
 
 func _state_roll(delta: float) -> void:
 	_roll_t += delta
+	if enabled and Input.is_action_just_pressed("roll"):
+		_roll_buffer = true
+	# Enchaînement : on relance une roulade à la fin de la phase où il avance,
+	# en gardant l'élan (la suivante part donc vite).
+	if _roll_buffer and _roll_t >= _roll_move_time * 0.85:
+		state = State.NORMAL
+		try_roll()
+		return
 	var input := Input.get_vector("move_left", "move_right", "move_forward", "move_back") if enabled else Vector2.ZERO
 	# Déplacement réel de l'animation (extrait de la version root motion du pack) :
 	# 5,76 m/s pendant 0,87 s, puis il se relève sur place.
@@ -169,9 +182,9 @@ func _state_roll(delta: float) -> void:
 		# Il continue d'avancer : on enchaîne direct sur la marche/course au moment
 		# où il se relève, en gardant l'élan (pas de relevé sur place).
 		if not rolling:
-			_finish()
+			_finish(0.0)
 	elif _roll_t >= _timer:
-		_finish()
+		_finish(0.0)
 
 
 # --- Glissade --------------------------------------------------------------
@@ -245,10 +258,10 @@ func _begin(new_state: State) -> void:
 	visual.rotation.y = atan2(-_move_dir.x, -_move_dir.z)
 
 
-func _finish() -> void:
+func _finish(cooldown := COOLDOWN) -> void:
 	anim.speed_scale = 1.0
 	state = State.NORMAL
-	_cooldown = COOLDOWN
+	_cooldown = cooldown
 
 
 func _face(dir: Vector3, delta: float) -> void:
