@@ -12,8 +12,20 @@ extends Node3D
 		_apply()
 
 
+var has_mask := true
+var noticed := false ## Le gardien a déjà remarqué que la vitrine est vide.
+
+
 func _ready() -> void:
+	add_to_group("vitrine")
 	_apply()
+
+
+## Le voleur prend le masque : la vitrine se retrouve ouverte et vide.
+func take_mask() -> void:
+	has_mask = false
+	$Mask.hide()
+	$Verre/Mesh.hide()
 
 
 func _apply() -> void:

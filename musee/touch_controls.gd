@@ -47,11 +47,18 @@ func _layout() -> void:
 	_u = clampf(s.y / 720.0, 0.6, 1.6)
 	var m := 36.0 * _u
 	_joy_center = Vector2(m + (JOY_RADIUS + 10) * _u, s.y - m - (JOY_RADIUS + 30) * _u)
-	var bw := 230.0 * _u
-	var bh := 90.0 * _u
+	var bw := 200.0 * _u
+	var bh := 84.0 * _u
+	var gap := 20.0 * _u
+	var col2 := s.x - m - bw
+	var col1 := col2 - gap - bw
+	var row1 := s.y - m - bh * 2 - gap
+	var row2 := s.y - m - bh
 	_buttons = {
-		"run": Rect2(s.x - m - bw, s.y - m - bh * 2 - 24 * _u, bw, bh),
-		"crouch": Rect2(s.x - m - bw, s.y - m - bh, bw, bh),
+		"roll": Rect2(col1, row1, bw, bh),
+		"take": Rect2(col1, row2, bw, bh),
+		"run": Rect2(col2, row1, bw, bh),
+		"crouch": Rect2(col2, row2, bw, bh),
 		"restart": Rect2(s.x - m - 190 * _u, m, 190 * _u, 64 * _u),
 	}
 	queue_redraw()
@@ -62,7 +69,11 @@ func _input(event: InputEvent) -> void:
 		var p: Vector2 = event.position
 		var i: int = event.index
 		if event.pressed:
-			if _buttons.run.has_point(p):
+			if _buttons.roll.has_point(p):
+				player.try_roll()
+			elif _buttons.take.has_point(p):
+				player.try_interact()
+			elif _buttons.run.has_point(p):
 				_run_finger = i
 				Input.action_press("run")
 			elif _buttons.crouch.has_point(p):
@@ -104,6 +115,7 @@ func _input(event: InputEvent) -> void:
 
 
 func _process(delta: float) -> void:
+	queue_redraw() # le bouton PRENDRE s'allume près d'une vitrine
 	# Lissage : on applique une partie du mouvement en attente à chaque image.
 	if player == null or _look_pending.length() < 0.01:
 		return
@@ -144,10 +156,13 @@ func _draw() -> void:
 	_text("SE DÉPLACER", _joy_center + Vector2(0, (JOY_RADIUS + 26) * _u), 20)
 	# Boutons
 	_button("run", "COURIR", "(maintenir - bruyant !)", _run_finger != -1)
-	_button("crouch", "S'ACCROUPIR", "(activé)" if _crouch_on else "(appuie : on / off)", _crouch_on)
+	_button("crouch", "S'ACCROUPIR", "(activé)" if _crouch_on else "(en courant : glissade)", _crouch_on)
+	_button("roll", "ROULADE", "(bond rapide)", false)
+	var near := player != null and player.nearest_vitrine() != null
+	_button("take", "PRENDRE", "(masque à portée !)" if near else "(près d'une vitrine)", near)
 	_button("restart", "REJOUER", "", false)
 	# Aide
-	_text("Objectif : atteins la porte verte sans être vu", Vector2(s.x * 0.42, 50 * _u), 22)
+	_text("Vole les masques puis sors sans être vu", Vector2(s.x * 0.45, 50 * _u), 22)
 	_text("Glisse le doigt ici pour tourner la caméra", Vector2(s.x * 0.5, s.y * 0.3), 18, 0.45)
 	# Téléphone à la verticale
 	if s.y > s.x:

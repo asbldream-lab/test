@@ -23,6 +23,7 @@ var _look_target := Vector3.ZERO
 var _done := false
 var _cone_mat := StandardMaterial3D.new()
 var _anim: AnimationPlayer
+var _alarm_flash := 0.0
 
 @onready var cone: MeshInstance3D = $VisionCone
 @onready var alert: Label3D = $Alert
@@ -61,7 +62,7 @@ func _physics_process(delta: float) -> void:
 	# Ouïe : un joueur qui court à proximité attire le regard du gardien.
 	var flat_to_player := player.global_position - global_position
 	flat_to_player.y = 0
-	if player.is_running and flat_to_player.length() < hearing_radius:
+	if flat_to_player.length() < hearing_radius * player.get_noise_level():
 		_investigate = 2.5
 		_look_target = player.global_position
 
@@ -126,7 +127,27 @@ func _can_see_player() -> bool:
 	return not hit.is_empty() and hit.collider == player
 
 
+## Le gardien remarque les vitrines vides dans son champ de vision et devient plus vigilant.
+func _check_vitrines() -> void:
+	var forward := -global_transform.basis.z
+	forward.y = 0
+	for v in get_tree().get_nodes_in_group("vitrine"):
+		if v.has_mask or v.noticed:
+			continue
+		var flat: Vector3 = (v.global_position - global_position) * Vector3(1, 0, 1)
+		if flat.length() < view_distance and forward.angle_to(flat) < deg_to_rad(view_angle / 2.0):
+			v.noticed = true
+			_investigate = 2.5
+			_look_target = v.global_position
+			_alarm_flash = 1.5
+			speed *= 1.15
+			view_distance += 0.8
+			_build_cone()
+
+
 func _update_vision(delta: float) -> void:
+	_check_vitrines()
+	_alarm_flash = maxf(0.0, _alarm_flash - delta)
 	if _can_see_player():
 		var dist := global_position.distance_to(player.global_position)
 		var closeness := lerpf(2.0, 0.6, clampf(dist / view_distance, 0.0, 1.0))
@@ -137,7 +158,7 @@ func _update_vision(delta: float) -> void:
 		_suspicion = maxf(0.0, _suspicion - delta * 0.5)
 
 	_cone_mat.albedo_color = Color(1, 0.9, 0.3, 0.22).lerp(Color(1, 0.1, 0.1, 0.4), clampf(_suspicion, 0, 1))
-	alert.text = "?" if _suspicion > 0.05 else ""
+	alert.text = "?!" if _alarm_flash > 0.0 else ("?" if _suspicion > 0.05 else "")
 
 	if _suspicion >= 1.0:
 		_done = true
