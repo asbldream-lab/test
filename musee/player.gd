@@ -18,7 +18,8 @@ var anim: AnimationPlayer
 
 
 func _ready() -> void:
-	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	if not DisplayServer.is_touchscreen_available():
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	pivot.rotation = Vector3(-0.6, -PI / 2, 0)
 	visual.rotation.y = -PI / 2
 	anim = setup_model($Visual/Model, body_color)
@@ -54,12 +55,17 @@ static func play_loop(player: AnimationPlayer, anim_name: String) -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
-		pivot.rotation.y -= event.relative.x * mouse_sensitivity
-		pivot.rotation.x = clampf(pivot.rotation.x - event.relative.y * mouse_sensitivity, -1.2, 0.15)
+		rotate_camera(event.relative)
 	elif event.is_action_pressed("ui_cancel"):
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-	elif event is InputEventMouseButton and event.pressed:
+	elif event is InputEventMouseButton and event.pressed and not DisplayServer.is_touchscreen_available():
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+
+
+## Tourne la caméra (souris ou glissement du doigt).
+func rotate_camera(relative: Vector2) -> void:
+	pivot.rotation.y -= relative.x * mouse_sensitivity
+	pivot.rotation.x = clampf(pivot.rotation.x - relative.y * mouse_sensitivity, -1.2, 0.15)
 
 
 func _physics_process(delta: float) -> void:

@@ -28,20 +28,32 @@ func _enter_tree() -> void:
 			InputMap.action_add_event(action, ev)
 
 
+var _touch := DisplayServer.is_touchscreen_available()
+
+
 func _ready() -> void:
 	message.text = ""
 	guard.player_spotted.connect(_on_spotted)
 	$Exit.body_entered.connect(_on_exit)
+	if _touch:
+		var pad: Control = preload("res://musee/touch_controls.gd").new()
+		pad.player = player
+		$HUD.add_child(pad)
+		$HUD/Aide.hide()
+
+
+func _replay_hint() -> String:
+	return "Touche REJOUER" if _touch else "Appuie sur R pour recommencer"
 
 
 func _on_spotted() -> void:
-	_end("REPÉRÉ !\nAppuie sur R pour recommencer", Color(1, 0.25, 0.2))
+	_end("REPÉRÉ !\n" + _replay_hint(), Color(1, 0.25, 0.2))
 
 
 func _on_exit(body: Node3D) -> void:
 	if body == player:
 		guard.set_physics_process(false)
-		_end("RÉUSSI !\nTu as traversé la salle sans être vu.\nR pour rejouer", Color(0.3, 1, 0.4))
+		_end("RÉUSSI !\nTu as traversé la salle sans être vu.\n" + _replay_hint(), Color(0.3, 1, 0.4))
 
 
 func _end(text: String, color: Color) -> void:
