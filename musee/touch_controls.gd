@@ -15,7 +15,7 @@ var _joy_finger := -1
 var _look_finger := -1
 var _look_last := Vector2.ZERO
 var _look_pending := Vector2.ZERO
-var _run_finger := -1
+var _run_on := false
 var _crouch_on := false
 var _buttons := {}
 var _font: Font
@@ -74,8 +74,12 @@ func _input(event: InputEvent) -> void:
 			elif _buttons.take.has_point(p):
 				player.try_interact()
 			elif _buttons.run.has_point(p):
-				_run_finger = i
-				Input.action_press("run")
+				# Courir = interrupteur : un appui pour courir, un autre pour arrêter.
+				_run_on = not _run_on
+				if _run_on:
+					Input.action_press("run")
+				else:
+					Input.action_release("run")
 			elif _buttons.crouch.has_point(p):
 				_crouch_on = not _crouch_on
 				if _crouch_on:
@@ -94,9 +98,6 @@ func _input(event: InputEvent) -> void:
 			if i == _joy_finger:
 				_joy_finger = -1
 				_set_joy(Vector2.ZERO)
-			elif i == _run_finger:
-				_run_finger = -1
-				Input.action_release("run")
 			elif i == _look_finger:
 				_look_finger = -1
 		queue_redraw()
@@ -155,7 +156,7 @@ func _draw() -> void:
 	draw_circle(_joy_center + _joy_vec * JOY_RADIUS * _u, KNOB_RADIUS * _u, Color(1, 1, 1, knob_alpha))
 	_text("SE DÉPLACER", _joy_center + Vector2(0, (JOY_RADIUS + 26) * _u), 20)
 	# Boutons
-	_button("run", "COURIR", "(maintenir - bruyant !)", _run_finger != -1)
+	_button("run", "COURIR", "(activé - bruyant !)" if _run_on else "(appuie : on / off)", _run_on)
 	_button("crouch", "S'ACCROUPIR", "(activé)" if _crouch_on else "(en courant : glissade)", _crouch_on)
 	_button("roll", "ROULADE", "(bond rapide)", false)
 	var near := player != null and player.nearest_vitrine() != null

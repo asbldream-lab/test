@@ -1,12 +1,11 @@
 class_name MuseumPlayer
 extends CharacterBody3D
 
-signal mask_taken(total: int)
+signal mask_taken(total: int, vitrine: Node3D)
 
 @export var walk_speed := 2.0
 @export var run_speed := 5.5
 @export var crouch_speed := 1.3
-@export var roll_distance := 3.0
 @export var slide_speed := 7.0
 @export var mouse_sensitivity := 0.003
 @export var body_color := Color(0.15, 0.15, 0.18)
@@ -15,6 +14,9 @@ enum State { NORMAL, ACTION, ROLL, SLIDE }
 
 const EXTRA_ANIMS := preload("res://musee/persos/anims2.glb")
 const COOLDOWN := 1.0
+const ROLL_SPEED := 5.76 ## Vitesse réelle de l'animation Roll (root motion).
+const ROLL_MOVE_TIME := 0.87 ## Durée pendant laquelle la roulade avance.
+const ACCEL := 25.0 ## Accélération/freinage au sol (m/s²), évite les à-coups.
 
 var state := State.NORMAL
 var is_crouching := false
@@ -27,7 +29,7 @@ var _low := false
 var _timer := 0.0
 var _cooldown := 0.0
 var _move_dir := Vector3.RIGHT
-var _roll_speed := 0.0
+var _roll_t := 0.0
 var _slide_vel := 0.0
 var _slide_phase := 0
 var _vitrine: Node3D
@@ -101,8 +103,10 @@ func _state_normal(delta: float) -> void:
 	is_running = run_held and not crouch_held and moving
 	_set_low(crouch_held)
 	var speed := crouch_speed if is_crouching else (run_speed if is_running else walk_speed)
-	velocity.x = dir.x * speed
-	velocity.z = dir.z * speed
+	# Accélération progressive : pas de changement de vitesse instantané
+	# (sortie de roulade/glissade fluide).
+	velocity.x = move_toward(velocity.x, dir.x * speed, ACCEL * delta)
+	velocity.z = move_toward(velocity.z, dir.z * speed, ACCEL * delta)
 	if moving:
 		_face(_move_dir, delta)
 
@@ -119,30 +123,30 @@ func _state_normal(delta: float) -> void:
 func try_roll() -> void:
 	if state != State.NORMAL or _cooldown > 0.0 or not enabled:
 		return
-	# La roulade garde l'élan : on part de la vitesse actuelle (marche, course ou arrêt).
-	var entry_speed := Vector2(velocity.x, velocity.z).length()
 	_begin(State.ROLL)
-	_roll_speed = maxf(entry_speed * 1.15, roll_distance / 1.2)
-	# Plus il va vite, plus la roulade est rapide (et l'animation accélérée).
-	anim.speed_scale = clampf(_roll_speed / 4.0, 0.9, 1.5)
-	_timer = play_once(anim, "Roll", 0.25) / anim.speed_scale
-	# On quitte la roulade avant la fin de l'animation pour enchaîner
-	# directement sur la marche/course en fondu, sans temps d'arrêt.
-	_timer *= 0.75
+	_timer = play_once(anim, "Roll", 0.15) # fondu depuis la marche/course
+	_roll_t = 0.0
 
 
 func _state_roll(delta: float) -> void:
-	velocity.x = _move_dir.x * _roll_speed
-	velocity.z = _move_dir.z * _roll_speed
-	# Le joueur peut légèrement orienter sa roulade avec le joystick / clavier.
-	var input := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
+	_roll_t += delta
+	var input := Input.get_vector("move_left", "move_right", "move_forward", "move_back") if enabled else Vector2.ZERO
+	# Déplacement réel de l'animation (extrait de la version root motion du pack) :
+	# 5,76 m/s pendant 0,87 s, puis il se relève sur place.
+	var rolling := _roll_t < ROLL_MOVE_TIME
+	var v := ROLL_SPEED if rolling else 0.0
+	velocity.x = _move_dir.x * v
+	velocity.z = _move_dir.z * v
 	if input.length() > 0.1:
+		# Orientation légère pendant la roulade.
 		var wanted := (Basis(Vector3.UP, pivot.rotation.y) * Vector3(input.x, 0, input.y)).normalized()
 		_move_dir = _move_dir.slerp(wanted, minf(1.0, 3.0 * delta)).normalized()
 		_face(_move_dir, delta)
-	_timer -= delta
-	if _timer <= 0.0:
-		anim.speed_scale = 1.0
+		# Il continue d'avancer : on enchaîne direct sur la marche/course au moment
+		# où il se relève, en gardant l'élan (pas de relevé sur place).
+		if not rolling:
+			_finish()
+	elif _roll_t >= _timer:
 		_finish()
 
 
@@ -192,9 +196,9 @@ func _state_action(delta: float) -> void:
 	_timer -= delta
 	if _vitrine and _timer <= _grab_at:
 		_vitrine.take_mask()
-		_vitrine = null
 		masks += 1
-		mask_taken.emit(masks)
+		mask_taken.emit(masks, _vitrine)
+		_vitrine = null
 	if _timer <= 0.0:
 		state = State.NORMAL
 

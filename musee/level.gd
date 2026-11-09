@@ -52,9 +52,11 @@ func _ready() -> void:
 		pad.player = player
 		$HUD.add_child(pad)
 		$HUD/Aide.hide()
+	$HUD.add_child(_popup) # au-dessus de la manette
 
 
 var _counter := Label.new()
+var _popup: Control = preload("res://musee/mask_popup.gd").new()
 var _flash := 0.0
 
 
@@ -62,8 +64,11 @@ func _total_masks() -> int:
 	return get_tree().get_nodes_in_group("vitrine").size()
 
 
-func _on_mask_taken(total: int) -> void:
+func _on_mask_taken(total: int, vitrine: Node3D = null) -> void:
 	_counter.text = "Masques : %d / %d" % [total, _total_masks()]
+	if vitrine:
+		# Laisse finir le geste de prise avant d'afficher la fiche du masque.
+		get_tree().create_timer(0.8).timeout.connect(_popup.show_mask.bind(vitrine))
 	# Porte rouge tant qu'il manque des masques, verte ensuite.
 	var open := total >= _total_masks()
 	var mat: StandardMaterial3D = $PorteSortie.mesh.material
