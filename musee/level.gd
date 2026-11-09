@@ -1,12 +1,14 @@
 extends Node3D
-## Construit le niveau courant à partir de levels.gd : pièce, cloisons, colonnes,
-## vitrines, gardiens, portes. Gère victoire, échec et passage au niveau suivant.
+## Construit tout le musée d'un seul tenant à partir de levels.gd : les salles sont
+## placées côte à côte et reliées par des couloirs (aucun chargement, retour possible).
+## Gère la salle courante, la mise en veille des salles éloignées, la réapparition et la victoire.
 
 const VITRINE := preload("res://musee/vitrine.tscn")
 const GUARD := preload("res://musee/guard.tscn")
 const WALL_H := 4.0
 
-static var current := 0 ## Niveau en cours (conservé quand la scène est rechargée).
+var current := 0 ## Salle en cours de construction (graine des tableaux, numéro).
+const CORRIDOR := 4.0
 
 @onready var player: MuseumPlayer = $Player
 @onready var message: Label = $HUD/Message
@@ -21,6 +23,11 @@ var _popup: Control = preload("res://musee/mask_popup.gd").new()
 var _pad: Control
 var _flash := 0.0
 var _exit_mat := StandardMaterial3D.new()
+var _root: Node3D = self
+var _rooms: Array[Dictionary] = [] ## {root, origin, size, guards, spawn, yaw, name}
+var _room := -1 ## salle où se trouve le joueur
+var _mobile := DisplayServer.is_touchscreen_available()
+var _cull_timer := 0.0
 
 
 func _enter_tree() -> void:
@@ -50,14 +57,17 @@ func _ready() -> void:
 	# Relâche les actions restées "enfoncées" (ex. touche avalée par le système avant la mort).
 	for a in InputMap.get_actions():
 		Input.action_release(a)
-	_data = Levels.LEVELS[current]
-	_build()
+	if _mobile:
+		# Réglages allégés pour téléphone.
+		get_viewport().msaa_3d = Viewport.MSAA_2X
+		get_viewport().scaling_3d_scale = 0.8
+	_build_museum()
 	player.mask_taken.connect(_on_mask_taken)
 
 	$HUD/Aide.hide()
 	$HUD.add_child(_hud)
 	$HUD.move_child(_hud, 0) # sous le message, la manette et la fiche
-	_hud.setup(current, Levels.LEVELS.size(), _data.name, _touch)
+
 	message.add_theme_font_override("font", preload("res://musee/fonts/Cinzel.ttf"))
 	message.add_theme_font_size_override("font_size", 40)
 	message.add_theme_constant_override("shadow_offset_y", 3)
@@ -68,12 +78,103 @@ func _ready() -> void:
 		_pad.player = player
 		$HUD.add_child(_pad)
 	$HUD.add_child(_popup) # au-dessus de la manette
-	_show("Niveau %d / %d\n%s" % [current + 1, Levels.LEVELS.size(), _data.name], Color(1, 0.9, 0.6), 3.0)
+	var r0: Dictionary = _rooms[0]
+	player.global_position = r0.spawn
+	player.set_facing(r0.yaw)
+	_update_room(true)
 
 
 # --- Construction du niveau -------------------------------------------------
 
-func _build() -> void:
+func _build_museum() -> void:
+	var origin := Vector3.ZERO
+	var count := Levels.LEVELS.size()
+	for i in count:
+		_data = Levels.LEVELS[i]
+		current = i
+		if i > 0:
+			# Le couloir part de la sortie de la salle précédente.
+			var prev: Dictionary = Levels.LEVELS[i - 1]
+			var out := -_inward(prev.exit[2])
+			var a: Vector3 = _rooms[i - 1].origin + Vector3(prev.exit[0], 0, prev.exit[1])
+			var b := a + out * CORRIDOR
+			_root = self
+			_corridor(a, b)
+			origin = b - Vector3(_data.entry[0], 0, _data.entry[1])
+		_root = Node3D.new()
+		_root.name = "Salle%d" % (i + 1)
+		_root.position = origin
+		add_child(_root)
+		var first_guard := guards.size()
+		_build(i == 0, i == count - 1)
+		var spawn: Vector3
+		var yaw: float
+		if i == 0:
+			spawn = origin + Vector3(_data.spawn[0], 0, _data.spawn[1])
+			yaw = deg_to_rad(_data.spawn[2])
+		else:
+			var inw := _inward(_data.entry[2])
+			spawn = origin + Vector3(_data.entry[0], 0, _data.entry[1]) + inw * 1.5
+			yaw = atan2(-inw.x, -inw.z)
+		_rooms.append({"root": _root, "origin": origin, "size": _data.size, "name": _data.name,
+			"guards": guards.slice(first_guard), "spawn": spawn, "yaw": yaw})
+	_root = self
+
+
+## Couloir entre deux salles (de a à b, au sol), éclairé.
+func _corridor(a: Vector3, b: Vector3) -> void:
+	var dir := (b - a).normalized()
+	var mid := (a + b) / 2
+	var side := Vector3(-dir.z, 0, dir.x)
+	var clen := a.distance_to(b)
+	var along_x := absf(dir.x) > 0.5
+	var floor_mat := _smat(0, Color(0.27, 0.15, 0.08), Color(0.48, 0.3, 0.16))
+	var wall_mat := _smat(1, Color(0.33, 0.05, 0.06), Color(0.5, 0.12, 0.1))
+	var fsize := Vector3(clen, 0.2, 2.4) if along_x else Vector3(2.4, 0.2, clen)
+	_box(mid + Vector3(0, -0.1, 0), fsize, floor_mat)
+	_box(mid + Vector3(0, WALL_H + 0.1, 0), fsize + Vector3(0.8, 0, 0.8) * Vector3(0 if along_x else 1, 0, 1 if along_x else 0), _smat(4, Color(0.32, 0.27, 0.22), Color(0.16, 0.12, 0.09)))
+	for sgn in [-1.0, 1.0]:
+		var wsize := Vector3(clen, WALL_H, 0.4) if along_x else Vector3(0.4, WALL_H, clen)
+		_box(mid + side * sgn * 1.4 + Vector3(0, WALL_H / 2, 0), wsize, wall_mat)
+	var light := OmniLight3D.new()
+	light.position = mid + Vector3(0, WALL_H - 0.5, 0)
+	light.light_color = Color(1, 0.88, 0.7)
+	light.light_energy = 0.8
+	light.omni_range = 5.0
+	add_child(light)
+
+
+## Mur extérieur d'un côté, avec une ouverture (et un linteau) à chaque position de `gaps`.
+func _outer_wall(side: String, w: float, d: float, mat: Material, gaps: Array) -> void:
+	var horiz := side == "N" or side == "S"
+	var half_len := (w + 0.8) / 2.0 if horiz else d / 2.0
+	var fixed: float
+	if horiz:
+		fixed = -(d / 2 + 0.2) if side == "N" else d / 2 + 0.2
+	else:
+		fixed = -(w / 2 + 0.2) if side == "W" else w / 2 + 0.2
+	var cuts: Array[float] = [-half_len]
+	gaps.sort()
+	for g in gaps:
+		cuts.append(g - 1.2)
+		cuts.append(g + 1.2)
+	cuts.append(half_len)
+	for k in range(0, cuts.size(), 2):
+		if cuts[k + 1] - cuts[k] > 0.05:
+			_wall_piece(horiz, fixed, (cuts[k] + cuts[k + 1]) / 2.0, cuts[k + 1] - cuts[k], 0.0, mat)
+	for g in gaps:
+		_wall_piece(horiz, fixed, g, 2.4, 2.6, mat) # linteau au-dessus de l'ouverture
+
+
+func _wall_piece(horiz: bool, fixed: float, mid: float, length: float, y0: float, mat: Material) -> void:
+	var h := WALL_H - y0
+	if horiz:
+		_box(Vector3(mid, y0 + h / 2, fixed), Vector3(length, h, 0.4), mat)
+	else:
+		_box(Vector3(fixed, y0 + h / 2, mid), Vector3(0.4, h, length), mat)
+
+
+func _build(first: bool, last: bool) -> void:
 	var w: float = _data.size.x
 	var d: float = _data.size.y
 	var floor_mat := _smat(0, Color(0.27, 0.15, 0.08), Color(0.48, 0.3, 0.16))
@@ -83,10 +184,14 @@ func _build() -> void:
 
 	_box(Vector3(0, -0.1, 0), Vector3(w, 0.2, d), floor_mat)
 	# Murs extérieurs puis cloisons intérieures.
-	_box(Vector3(0, WALL_H / 2, -d / 2 - 0.2), Vector3(w + 0.8, WALL_H, 0.4), wall_mat)
-	_box(Vector3(0, WALL_H / 2, d / 2 + 0.2), Vector3(w + 0.8, WALL_H, 0.4), wall_mat)
-	_box(Vector3(-w / 2 - 0.2, WALL_H / 2, 0), Vector3(0.4, WALL_H, d), wall_mat)
-	_box(Vector3(w / 2 + 0.2, WALL_H / 2, 0), Vector3(0.4, WALL_H, d), wall_mat)
+	# Ouvertures : vers la salle précédente (entrée) et la suivante (sortie).
+	var gaps := {"N": [], "S": [], "E": [], "W": []}
+	if not first:
+		gaps[_data.entry[2]].append(_data.entry[0] if _data.entry[2] in ["N", "S"] else _data.entry[1])
+	if not last:
+		gaps[_data.exit[2]].append(_data.exit[0] if _data.exit[2] in ["N", "S"] else _data.exit[1])
+	for side in ["N", "S", "E", "W"]:
+		_outer_wall(side, w, d, wall_mat, gaps[side])
 	for r in _data.walls:
 		_box(Vector3(r[0], WALL_H / 2, r[1]), Vector3(r[2], WALL_H, r[3]), wall_mat)
 	for c in _data.columns:
@@ -94,9 +199,11 @@ func _build() -> void:
 	_box(Vector3(0, WALL_H + 0.1, 0), Vector3(w + 0.8, 0.2, d + 0.8), _smat(4, Color(0.32, 0.27, 0.22), Color(0.16, 0.12, 0.09))) # plafond à caissons
 	_decor(w, d)
 
-	_door(_data.entry, _mat(Color(0.3, 0.18, 0.1), 0.8))
-	_door(_data.exit, _exit_mat)
-	_exit_area(_data.exit)
+	if first:
+		_door(_data.entry, _mat(Color(0.3, 0.18, 0.1), 0.8))
+	if last:
+		_door(_data.exit, _exit_mat)
+		_exit_area(_data.exit)
 	_paintings(w, d)
 
 	_lighting(w, d)
@@ -110,7 +217,7 @@ func _build() -> void:
 		vit.accent_color = m[4]
 		vit.position = Vector3(v[0], 0, v[1])
 		vit.rotation.y = deg_to_rad(v[2])
-		add_child(vit)
+		_root.add_child(vit)
 		vit.get_node("Socle/Mesh").material_override = plinth_mat # socle en marbre noir veiné d'or
 		var sp: SpotLight3D = vit.get_node("Spot")
 		sp.light_energy = 1.6
@@ -121,17 +228,16 @@ func _build() -> void:
 		var guard: MuseumGuard = GUARD.instantiate()
 		var pts: Array[Vector3] = []
 		for p in g.wp:
-			pts.append(Vector3(p[0], 0, p[1]))
+			pts.append(_root.position + Vector3(p[0], 0, p[1])) # points de ronde en coordonnées monde
 		guard.waypoints = pts
 		guard.start_index = g.get("start", 0)
 		guard.spin_speed = g.get("spin", 0.0)
-		guard.position = pts[guard.start_index]
-		add_child(guard)
+		guard.position = pts[guard.start_index] - _root.position
+		_root.add_child(guard)
 		guard.player_spotted.connect(_on_spotted)
 		guards.append(guard)
-
-	player.global_position = Vector3(_data.spawn[0], 0, _data.spawn[1])
-	player.set_facing(deg_to_rad(_data.spawn[2]))
+		if _mobile:
+			guard.get_node("Lampe").shadow_enabled = false
 
 
 func _mat(color: Color, rough: float) -> StandardMaterial3D:
@@ -159,7 +265,7 @@ func _box(pos: Vector3, size: Vector3, mat: Material) -> void:
 	col.shape = BoxShape3D.new()
 	col.shape.size = size
 	body.add_child(col)
-	add_child(body)
+	_root.add_child(body)
 
 
 func _column(pos: Vector3, mat: Material) -> void:
@@ -177,7 +283,7 @@ func _column(pos: Vector3, mat: Material) -> void:
 	col.shape.height = WALL_H
 	body.add_child(mesh)
 	body.add_child(col)
-	add_child(body)
+	_root.add_child(body)
 
 
 ## Tableaux sur les murs extérieurs (un tous les ~5 m), en évitant portes et cloisons.
@@ -250,6 +356,9 @@ func _paintings(w: float, d: float) -> void:
 			label.outline_size = 0
 			label.position = Vector3(0, -size.y / 2 - 0.25, 0.022)
 			holder.add_child(label)
+			if _mobile and img_i % 2 == 0:
+				_root.add_child(holder)
+				continue
 			# Spot de galerie qui éclaire le tableau depuis le plafond.
 			var spot := SpotLight3D.new()
 			spot.light_color = Color(1, 0.9, 0.75)
@@ -260,7 +369,7 @@ func _paintings(w: float, d: float) -> void:
 			spot.position = Vector3(0, 1.5, 1.1)
 			spot.rotation_degrees = Vector3(-55, 0, 0)
 			holder.add_child(spot)
-			add_child(holder)
+			_root.add_child(holder)
 
 
 func _canvas(rng: RandomNumberGenerator) -> StandardMaterial3D:
@@ -359,7 +468,7 @@ func _lighting(w: float, d: float) -> void:
 	env.glow_intensity = 0.6
 	env.glow_bloom = 0.0
 	env.glow_hdr_threshold = 1.2
-	env.fog_enabled = true
+	env.fog_enabled = not _mobile
 	env.fog_light_color = Color(0.25, 0.22, 0.2)
 	env.fog_density = 0.008
 	var fixture := _emissive(Color(1, 0.9, 0.7), 3.0)
@@ -368,14 +477,14 @@ func _lighting(w: float, d: float) -> void:
 	for ix in nx:
 		for iz in nz:
 			var p := Vector3((ix + 0.5) * w / nx - w / 2, WALL_H - 0.05, (iz + 0.5) * d / nz - d / 2)
-			add_child(_mesh_at(_cylm(0.35, 0.06), fixture, p))
+			_root.add_child(_mesh_at(_cylm(0.35, 0.06), fixture, p))
 			var light := OmniLight3D.new()
 			light.position = p - Vector3(0, 0.4, 0)
 			light.light_color = Color(1, 0.88, 0.7)
 			light.light_energy = 0.95
 			light.omni_range = 7.5
 			light.omni_attenuation = 1.4
-			add_child(light)
+			_root.add_child(light)
 
 
 func _decor(w: float, d: float) -> void:
@@ -385,7 +494,7 @@ func _decor(w: float, d: float) -> void:
 		plane.size = Vector2(r[2], r[3])
 		var rug := _smat(3, Color(0.32, 0.04, 0.06), Color(0.12, 0.05, 0.12))
 		rug.set_shader_parameter("rug_size", Vector2(r[2], r[3]))
-		add_child(_mesh_at(plane, rug, Vector3(r[0], 0.012, r[1])))
+		_root.add_child(_mesh_at(plane, rug, Vector3(r[0], 0.012, r[1])))
 	# Bancs de musée.
 	var wood := _mat(Color(0.3, 0.18, 0.1), 0.5)
 	var metal := _mat(Color(0.1, 0.1, 0.1), 0.3)
@@ -401,7 +510,7 @@ func _decor(w: float, d: float) -> void:
 		col.shape.size = Vector3(1.8, 0.5, 0.5)
 		col.position.y = 0.25
 		bench.add_child(col)
-		add_child(bench)
+		_root.add_child(bench)
 	# Plantes dans les coins.
 	var pot := _mat(Color(0.6, 0.3, 0.2), 0.8)
 	var leaves := _mat(Color(0.12, 0.3, 0.1), 0.9)
@@ -420,7 +529,7 @@ func _decor(w: float, d: float) -> void:
 		col.shape.height = 1.4
 		col.position.y = 0.7
 		plant.add_child(col)
-		add_child(plant)
+		_root.add_child(plant)
 	# Cordons de sécurité devant une vitrine sur deux.
 	var post_mat := _mat(Color(0.8, 0.65, 0.3), 0.3)
 	post_mat.metallic = 0.8
@@ -433,7 +542,7 @@ func _decor(w: float, d: float) -> void:
 		for x in [-0.75, 0.75]:
 			holder.add_child(_mesh_at(_cylm(0.03, 0.9), post_mat, Vector3(x, 0.45, 1.0)))
 		holder.add_child(_mesh_at(_boxm(Vector3(1.5, 0.03, 0.03)), rope, Vector3(0, 0.82, 1.0)))
-		add_child(holder)
+		_root.add_child(holder)
 	# Panneau SORTIE lumineux au-dessus de la porte de sortie.
 	var e: Array = _data.exit
 	var sign_holder := Node3D.new()
@@ -442,13 +551,13 @@ func _decor(w: float, d: float) -> void:
 	sign_holder.rotation.y = atan2(inward.x, inward.z)
 	sign_holder.add_child(_mesh_at(_boxm(Vector3(0.9, 0.3, 0.06)), _emissive(Color(0.1, 0.8, 0.3), 2.5), Vector3.ZERO))
 	var txt := Label3D.new()
-	txt.text = "SORTIE"
+	txt.text = "SORTIE" if current == Levels.LEVELS.size() - 1 else "SALLE %d" % (current + 2)
 	txt.font_size = 48
 	txt.pixel_size = 0.004
 	txt.position.z = 0.035
 	txt.outline_size = 0
 	sign_holder.add_child(txt)
-	add_child(sign_holder)
+	_root.add_child(sign_holder)
 	# Caméras de surveillance (décor) dans deux coins.
 	var cam_mat := _mat(Color(0.85, 0.85, 0.85), 0.4)
 	for c in [Vector2(-1, -1), Vector2(1, 1)]:
@@ -457,7 +566,7 @@ func _decor(w: float, d: float) -> void:
 		cam.transform = Transform3D(Basis.looking_at(Vector3.ZERO - cpos), cpos) # vise le centre
 		cam.add_child(_mesh_at(_boxm(Vector3(0.18, 0.15, 0.4)), cam_mat, Vector3.ZERO))
 		cam.add_child(_mesh_at(_boxm(Vector3(0.05, 0.05, 0.02)), _emissive(Color(1, 0.1, 0.1), 4.0), Vector3(0.05, 0.05, -0.21)))
-		add_child(cam)
+		_root.add_child(cam)
 
 
 ## Vecteur vers l'intérieur de la pièce pour un mur donné.
@@ -473,7 +582,7 @@ func _door(info: Array, mat: Material) -> void:
 	mesh.mesh.size = Vector3(1.6, 2.4, 0.1) if horiz else Vector3(0.1, 2.4, 1.6)
 	mesh.material_override = mat
 	mesh.position = Vector3(info[0], 1.2, info[1]) + _inward(side) * 0.03
-	add_child(mesh)
+	_root.add_child(mesh)
 
 
 func _exit_area(info: Array) -> void:
@@ -485,14 +594,17 @@ func _exit_area(info: Array) -> void:
 	col.shape = BoxShape3D.new()
 	col.shape.size = Vector3(1.6, 2.5, 1.6)
 	area.add_child(col)
-	add_child(area)
+	_root.add_child(area)
 	area.body_entered.connect(_on_exit)
 
 
 # --- Déroulement de la partie ----------------------------------------------
 
 func _total_masks() -> int:
-	return _data.vitrines.size()
+	var n := 0
+	for l in Levels.LEVELS:
+		n += l.vitrines.size()
+	return n
 
 
 func _on_mask_taken(total: int, vitrine: Node3D = null) -> void:
@@ -504,6 +616,35 @@ func _on_mask_taken(total: int, vitrine: Node3D = null) -> void:
 	_exit_mat.emission = Color(0.1, 0.9, 0.3)
 
 
+## Salle contenant le joueur (marge de 0,5 m), ou -1 dans un couloir.
+func _room_at(p: Vector3) -> int:
+	for k in _rooms.size():
+		var r: Dictionary = _rooms[k]
+		var local: Vector3 = p - r.origin
+		if absf(local.x) < r.size.x / 2 + 0.5 and absf(local.z) < r.size.y / 2 + 0.5:
+			return k
+	return -1
+
+
+## Met à jour la salle courante et met en veille les salles éloignées (affichage + gardiens).
+func _update_room(force := false) -> void:
+	var k := _room_at(player.global_position)
+	if k != -1 and (k != _room or force):
+		_room = k
+		var r: Dictionary = _rooms[k]
+		_hud.setup(k, _rooms.size(), r.name, _touch)
+		_show("Salle %d / %d\n%s" % [k + 1, _rooms.size(), r.name], Color(1, 0.9, 0.6), 2.5)
+	for n in _rooms.size():
+		var r: Dictionary = _rooms[n]
+		var local: Vector3 = player.global_position - r.origin
+		var dx := maxf(0.0, absf(local.x) - r.size.x / 2)
+		var dz := maxf(0.0, absf(local.z) - r.size.y / 2)
+		var active := n == _room or Vector2(dx, dz).length() < 8.0
+		r.root.visible = active
+		for g in r.guards:
+			g.process_mode = Node.PROCESS_MODE_INHERIT if active else Node.PROCESS_MODE_DISABLED
+
+
 func _show(text: String, color: Color, seconds := 0.0) -> void:
 	message.text = text
 	message.modulate = color
@@ -511,6 +652,10 @@ func _show(text: String, color: Color, seconds := 0.0) -> void:
 
 
 func _process(delta: float) -> void:
+	_cull_timer -= delta
+	if _cull_timer <= 0.0:
+		_cull_timer = 0.2
+		_update_room()
 	# Jauge de visibilité : soupçon le plus élevé parmi les gardiens.
 	var vis := 0.0
 	var seen := false
@@ -531,7 +676,26 @@ func _process(delta: float) -> void:
 
 
 func _on_spotted() -> void:
-	_end("REPÉRÉ !\n" + ("Touche REJOUER" if _touch else "Appuie sur R pour recommencer"), Color(1, 0.25, 0.2))
+	if _over:
+		return
+	_end("REPÉRÉ !\nRetour à l'entrée de la salle...", Color(1, 0.25, 0.2))
+	await get_tree().create_timer(1.8).timeout
+	_respawn()
+
+
+## Réapparition à l'entrée de la salle en cours, sans rechargement (masques conservés).
+func _respawn() -> void:
+	var r: Dictionary = _rooms[maxi(_room, 0)]
+	player.state = MuseumPlayer.State.NORMAL
+	player.anim.speed_scale = 1.0
+	player.velocity = Vector3.ZERO
+	player.global_position = r.spawn
+	player.set_facing(r.yaw)
+	for g in guards:
+		g.reset()
+	player.enabled = true
+	_over = false
+	message.text = ""
 
 
 func _on_exit(body: Node3D) -> void:
@@ -540,18 +704,10 @@ func _on_exit(body: Node3D) -> void:
 	for g in guards:
 		g.set_physics_process(false)
 	_won = true
-	var score := "Masques récupérés : %d / %d" % [player.masks, _total_masks()]
-	var last := current >= Levels.LEVELS.size() - 1
-	if last:
-		_end("BRAVO ! Tu as traversé tout le musée !\n%s\nRetour au niveau 1..." % score, Color(1, 0.85, 0.3))
-	else:
-		_end("NIVEAU %d RÉUSSI !\n%s\nNiveau suivant..." % [current + 1, score], Color(0.3, 1, 0.4))
 	if _pad:
 		_pad.hide()
-	# Téléportation automatique vers le niveau suivant.
-	await get_tree().create_timer(4.0 if last else 2.5).timeout
-	current = (current + 1) % Levels.LEVELS.size()
-	get_tree().reload_current_scene()
+	_end("BRAVO ! Tu as traversé tout le musée !\nMasques récupérés : %d / %d\n%s" % [player.masks, _total_masks(),
+		"Touche REJOUER" if _touch else "Appuie sur R pour rejouer"], Color(1, 0.85, 0.3))
 
 
 func _end(text: String, color: Color) -> void:
@@ -563,5 +719,5 @@ func _end(text: String, color: Color) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if not _won and event.is_action_pressed("restart"):
+	if event.is_action_pressed("restart"):
 		get_tree().reload_current_scene()

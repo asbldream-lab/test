@@ -153,6 +153,22 @@ func _mesh(mesh: Mesh, mat: Material, pos: Vector3, rot_deg := Vector3.ZERO) -> 
 	return mi
 
 
+## Remet le gardien à son point de départ, calme (réapparition du joueur).
+func reset() -> void:
+	_index = start_index
+	global_position = waypoints[start_index]
+	velocity = Vector3.ZERO
+	_wait = 0.0
+	_suspicion = 0.0
+	_investigate = 0.0
+	_alarm_flash = 0.0
+	_done = false
+	sees_player = false
+	alert.text = ""
+	alert.modulate = Color(1, 0.85, 0.2)
+	set_physics_process(true)
+
+
 ## Niveau de soupçon (0..1), pour la jauge de visibilité.
 func get_suspicion() -> float:
 	return clampf(_suspicion, 0.0, 1.0)
