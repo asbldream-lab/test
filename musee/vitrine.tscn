@@ -1,0 +1,133 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://musee/vitrine.gd" id="1_vit"]
+
+[sub_resource type="StandardMaterial3D" id="mat_wood"]
+albedo_color = Color(0.43, 0.27, 0.15, 1)
+roughness = 0.8
+
+[sub_resource type="StandardMaterial3D" id="mat_glass"]
+transparency = 1
+albedo_color = Color(0.8, 0.92, 1, 0.12)
+metallic_specular = 1.0
+roughness = 0.05
+
+[sub_resource type="StandardMaterial3D" id="mat_dark"]
+albedo_color = Color(0.03, 0.02, 0.02, 1)
+
+[sub_resource type="StandardMaterial3D" id="mat_metal"]
+albedo_color = Color(0.2, 0.2, 0.2, 1)
+metallic = 0.8
+roughness = 0.3
+
+[sub_resource type="BoxMesh" id="mesh_plinth"]
+material = SubResource("mat_wood")
+size = Vector3(0.9, 1, 0.9)
+
+[sub_resource type="BoxShape3D" id="shape_plinth"]
+size = Vector3(0.9, 1, 0.9)
+
+[sub_resource type="BoxMesh" id="mesh_glass"]
+material = SubResource("mat_glass")
+size = Vector3(0.8, 0.8, 0.8)
+
+[sub_resource type="BoxShape3D" id="shape_glass"]
+size = Vector3(0.8, 0.8, 0.8)
+
+[sub_resource type="CapsuleMesh" id="mesh_face"]
+radius = 0.13
+height = 0.5
+
+[sub_resource type="BoxMesh" id="mesh_eye"]
+material = SubResource("mat_dark")
+size = Vector3(0.07, 0.025, 0.03)
+
+[sub_resource type="BoxMesh" id="mesh_mouth"]
+material = SubResource("mat_dark")
+size = Vector3(0.07, 0.035, 0.03)
+
+[sub_resource type="BoxMesh" id="mesh_nose"]
+size = Vector3(0.03, 0.11, 0.05)
+
+[sub_resource type="BoxMesh" id="mesh_band"]
+size = Vector3(0.22, 0.03, 0.04)
+
+[sub_resource type="BoxMesh" id="mesh_cheek"]
+size = Vector3(0.02, 0.09, 0.03)
+
+[sub_resource type="CylinderMesh" id="mesh_rod"]
+material = SubResource("mat_metal")
+top_radius = 0.012
+bottom_radius = 0.012
+height = 0.16
+
+[node name="Vitrine" type="Node3D"]
+script = ExtResource("1_vit")
+
+[node name="Socle" type="StaticBody3D" parent="."]
+
+[node name="Mesh" type="MeshInstance3D" parent="Socle"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 0)
+mesh = SubResource("mesh_plinth")
+
+[node name="Shape" type="CollisionShape3D" parent="Socle"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 0)
+shape = SubResource("shape_plinth")
+
+[node name="Verre" type="StaticBody3D" parent="."]
+collision_layer = 8
+collision_mask = 0
+
+[node name="Mesh" type="MeshInstance3D" parent="Verre"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.4, 0)
+mesh = SubResource("mesh_glass")
+
+[node name="Shape" type="CollisionShape3D" parent="Verre"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.4, 0)
+shape = SubResource("shape_glass")
+
+[node name="Mask" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.4, 0)
+
+[node name="Face" type="MeshInstance3D" parent="Mask"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 0.45, 0, 0, 0)
+mesh = SubResource("mesh_face")
+
+[node name="EyeL" type="MeshInstance3D" parent="Mask"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.055, 0.06, 0.055)
+mesh = SubResource("mesh_eye")
+
+[node name="EyeR" type="MeshInstance3D" parent="Mask"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.055, 0.06, 0.055)
+mesh = SubResource("mesh_eye")
+
+[node name="Nose" type="MeshInstance3D" parent="Mask"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.02, 0.06)
+mesh = SubResource("mesh_nose")
+
+[node name="Mouth" type="MeshInstance3D" parent="Mask"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.12, 0.05)
+mesh = SubResource("mesh_mouth")
+
+[node name="Band" type="MeshInstance3D" parent="Mask"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.15, 0.045)
+mesh = SubResource("mesh_band")
+
+[node name="CheekL" type="MeshInstance3D" parent="Mask"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.085, -0.03, 0.05)
+mesh = SubResource("mesh_cheek")
+
+[node name="CheekR" type="MeshInstance3D" parent="Mask"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.085, -0.03, 0.05)
+mesh = SubResource("mesh_cheek")
+
+[node name="Rod" type="MeshInstance3D" parent="Mask"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.32, 0)
+mesh = SubResource("mesh_rod")
+
+[node name="Spot" type="SpotLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0, -1, 0, 1, 0, 0, 3.4, 0)
+light_color = Color(1, 0.9, 0.75, 1)
+light_energy = 3.0
+spot_range = 4.0
+spot_angle = 22.0
