@@ -16,7 +16,7 @@ var _data: Dictionary
 var _over := false
 var _won := false
 var _touch := DisplayServer.is_touchscreen_available()
-var _counter := Label.new()
+var _hud: Control = preload("res://musee/hud.gd").new()
 var _popup: Control = preload("res://musee/mask_popup.gd").new()
 var _pad: Control
 var _flash := 0.0
@@ -54,20 +54,19 @@ func _ready() -> void:
 	_build()
 	player.mask_taken.connect(_on_mask_taken)
 
-	$HUD/Aide.text = "ZQSD : marcher   Maj : courir (bruyant)   C : s'accroupir   C en courant : glissade\n" \
-		+ "Espace : roulade   E : prendre un masque   R : recommencer   Échap : libérer la souris\n" \
-		+ "Objectif : atteins la porte verte sans te faire voir. Bonus : vole les %d masques !" % _total_masks()
-	_counter.position = Vector2(16, 100) if not _touch else Vector2(16, 12)
-	_counter.add_theme_font_size_override("font_size", 24)
-	_counter.add_theme_constant_override("outline_size", 8)
-	_counter.add_theme_color_override("font_outline_color", Color.BLACK)
-	$HUD.add_child(_counter)
+	$HUD/Aide.hide()
+	$HUD.add_child(_hud)
+	$HUD.move_child(_hud, 0) # sous le message, la manette et la fiche
+	_hud.setup(current, Levels.LEVELS.size(), _data.name, _touch)
+	message.add_theme_font_override("font", preload("res://musee/fonts/Cinzel.ttf"))
+	message.add_theme_font_size_override("font_size", 40)
+	message.add_theme_constant_override("shadow_offset_y", 3)
+	message.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.8))
 	_on_mask_taken(0)
 	if _touch:
 		_pad = preload("res://musee/touch_controls.gd").new()
 		_pad.player = player
 		$HUD.add_child(_pad)
-		$HUD/Aide.hide()
 	$HUD.add_child(_popup) # au-dessus de la manette
 	_show("Niveau %d / %d\n%s" % [current + 1, Levels.LEVELS.size(), _data.name], Color(1, 0.9, 0.6), 3.0)
 
@@ -77,9 +76,9 @@ func _ready() -> void:
 func _build() -> void:
 	var w: float = _data.size.x
 	var d: float = _data.size.y
-	var floor_mat := _parquet()
-	var wall_mat := _mat(Color(0.5, 0.17, 0.15), 0.85)
-	var col_mat := _mat(Color(0.78, 0.72, 0.62), 0.8)
+	var floor_mat := _smat(0, Color(0.27, 0.15, 0.08), Color(0.48, 0.3, 0.16))
+	var wall_mat := _smat(1, Color(0.33, 0.05, 0.06), Color(0.5, 0.12, 0.1))
+	var col_mat := _smat(2, Color(0.93, 0.91, 0.87), Color(0.45, 0.43, 0.42))
 	_exit_mat.emission_enabled = true
 
 	_box(Vector3(0, -0.1, 0), Vector3(w, 0.2, d), floor_mat)
@@ -92,7 +91,7 @@ func _build() -> void:
 		_box(Vector3(r[0], WALL_H / 2, r[1]), Vector3(r[2], WALL_H, r[3]), wall_mat)
 	for c in _data.columns:
 		_column(Vector3(c[0], 0, c[1]), col_mat)
-	_box(Vector3(0, WALL_H + 0.1, 0), Vector3(w + 0.8, 0.2, d + 0.8), _mat(Color(0.82, 0.78, 0.7), 0.9)) # plafond
+	_box(Vector3(0, WALL_H + 0.1, 0), Vector3(w + 0.8, 0.2, d + 0.8), _smat(4, Color(0.32, 0.27, 0.22), Color(0.16, 0.12, 0.09))) # plafond à caissons
 	_decor(w, d)
 
 	_door(_data.entry, _mat(Color(0.3, 0.18, 0.1), 0.8))
@@ -102,6 +101,7 @@ func _build() -> void:
 
 	_lighting(w, d)
 
+	var plinth_mat := _smat(2, Color(0.07, 0.06, 0.06), Color(0.6, 0.48, 0.3))
 	for v in _data.vitrines:
 		var m: Array = Levels.MASKS[v[3]]
 		var vit := VITRINE.instantiate()
@@ -111,6 +111,11 @@ func _build() -> void:
 		vit.position = Vector3(v[0], 0, v[1])
 		vit.rotation.y = deg_to_rad(v[2])
 		add_child(vit)
+		vit.get_node("Socle/Mesh").material_override = plinth_mat # socle en marbre noir veiné d'or
+		var sp: SpotLight3D = vit.get_node("Spot")
+		sp.light_energy = 1.6
+		sp.spot_angle = 32
+		sp.spot_angle_attenuation = 0.7 # bord de lumière doux
 
 	for g in _data.guards:
 		var guard: MuseumGuard = GUARD.instantiate()
@@ -248,9 +253,10 @@ func _paintings(w: float, d: float) -> void:
 			# Spot de galerie qui éclaire le tableau depuis le plafond.
 			var spot := SpotLight3D.new()
 			spot.light_color = Color(1, 0.9, 0.75)
-			spot.light_energy = 2.0
-			spot.spot_range = 3.2
-			spot.spot_angle = 28
+			spot.light_energy = 1.3
+			spot.spot_range = 3.4
+			spot.spot_angle = 38
+			spot.spot_angle_attenuation = 0.7
 			spot.position = Vector3(0, 1.5, 1.1)
 			spot.rotation_degrees = Vector3(-55, 0, 0)
 			holder.add_child(spot)
@@ -298,6 +304,20 @@ func _mesh_at(mesh: Mesh, mat: Material, pos: Vector3) -> MeshInstance3D:
 	return mi
 
 
+const MUSEUM := preload("res://musee/museum.gdshader")
+
+
+## Matière procédurale (voir museum.gdshader) : 0 parquet, 1 mur, 2 marbre, 3 tapis, 4 plafond.
+func _smat(mode: int, a: Color, b: Color, c := Color(0.78, 0.6, 0.28)) -> ShaderMaterial:
+	var m := ShaderMaterial.new()
+	m.shader = MUSEUM
+	m.set_shader_parameter("mode", mode)
+	m.set_shader_parameter("color_a", a)
+	m.set_shader_parameter("color_b", b)
+	m.set_shader_parameter("color_c", c)
+	return m
+
+
 func _emissive(c: Color, energy: float) -> StandardMaterial3D:
 	var m := _mat(c, 0.5)
 	m.emission_enabled = true
@@ -334,10 +354,11 @@ func _lighting(w: float, d: float) -> void:
 	env.ambient_light_color = Color(0.45, 0.4, 0.38)
 	env.ambient_light_energy = 0.35
 	env.tonemap_mode = Environment.TONE_MAPPER_ACES
-	env.tonemap_exposure = 1.1
+	env.tonemap_exposure = 1.35
 	env.glow_enabled = true
 	env.glow_intensity = 0.6
-	env.glow_bloom = 0.05
+	env.glow_bloom = 0.0
+	env.glow_hdr_threshold = 1.2
 	env.fog_enabled = true
 	env.fog_light_color = Color(0.25, 0.22, 0.2)
 	env.fog_density = 0.008
@@ -358,17 +379,13 @@ func _lighting(w: float, d: float) -> void:
 
 
 func _decor(w: float, d: float) -> void:
-	# Plinthes sombres au bas des murs extérieurs.
-	var base := _mat(Color(0.15, 0.08, 0.06), 0.5)
-	for p in [[Vector3(0, 0.08, -d / 2 + 0.025), Vector3(w, 0.16, 0.05)], [Vector3(0, 0.08, d / 2 - 0.025), Vector3(w, 0.16, 0.05)],
-			[Vector3(-w / 2 + 0.025, 0.08, 0), Vector3(0.05, 0.16, d)], [Vector3(w / 2 - 0.025, 0.08, 0), Vector3(0.05, 0.16, d)]]:
-		add_child(_mesh_at(_boxm(p[1]), base, p[0]))
 	# Tapis.
-	var rug := _mat(Color(0.35, 0.06, 0.07), 1.0)
-	var rug_border := _mat(Color(0.75, 0.6, 0.3), 1.0)
 	for r in _data.rugs:
-		add_child(_mesh_at(_boxm(Vector3(r[2], 0.012, r[3])), rug_border, Vector3(r[0], 0.006, r[1])))
-		add_child(_mesh_at(_boxm(Vector3(r[2] - 0.2, 0.014, r[3] - 0.2)), rug, Vector3(r[0], 0.008, r[1])))
+		var plane := PlaneMesh.new()
+		plane.size = Vector2(r[2], r[3])
+		var rug := _smat(3, Color(0.32, 0.04, 0.06), Color(0.12, 0.05, 0.12))
+		rug.set_shader_parameter("rug_size", Vector2(r[2], r[3]))
+		add_child(_mesh_at(plane, rug, Vector3(r[0], 0.012, r[1])))
 	# Bancs de musée.
 	var wood := _mat(Color(0.3, 0.18, 0.1), 0.5)
 	var metal := _mat(Color(0.1, 0.1, 0.1), 0.3)
@@ -479,7 +496,7 @@ func _total_masks() -> int:
 
 
 func _on_mask_taken(total: int, vitrine: Node3D = null) -> void:
-	_counter.text = "Masques : %d / %d" % [total, _total_masks()]
+	_hud.set_masks(total, _total_masks())
 	if vitrine:
 		# Laisse finir le geste de prise avant d'afficher la fiche du masque.
 		get_tree().create_timer(0.8).timeout.connect(_popup.show_mask.bind(vitrine))
@@ -494,6 +511,13 @@ func _show(text: String, color: Color, seconds := 0.0) -> void:
 
 
 func _process(delta: float) -> void:
+	# Jauge de visibilité : soupçon le plus élevé parmi les gardiens.
+	var vis := 0.0
+	var seen := false
+	for g in guards:
+		vis = maxf(vis, g.get_suspicion())
+		seen = seen or g.sees_player
+	_hud.set_visibility(vis, seen)
 	if _flash > 0.0:
 		_flash -= delta
 		if _flash <= 0.0 and not _over:

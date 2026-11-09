@@ -23,6 +23,10 @@ _mcp_game_helper="*res://addons/godot_ai/runtime/game_helper.gd"
 
 enabled=PackedStringArray("res://addons/godot_ai/plugin.cfg")
 
+[gui]
+
+theme/custom_font="res://musee/fonts/Raleway.ttf"
+
 [input_devices]
 
 pointing/emulate_mouse_from_touch=false
@@ -31,3 +35,4 @@ pointing/emulate_mouse_from_touch=false
 
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
+anti_aliasing/quality/msaa_3d=2

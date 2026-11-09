@@ -26,4 +26,6 @@ void fragment() {
 	if (r > 0.23 && h > 0.6 && h < 0.95) { c = skin; rough = 0.6; } // mains le long du corps
 	ALBEDO = c;
 	ROUGHNESS = rough;
+	RIM = 0.35; // liseré de lumière : silhouette lisible dans la pénombre
+	RIM_TINT = 0.4;
 }

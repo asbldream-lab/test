@@ -44,6 +44,10 @@ var _slide_phase := 0
 var _vitrine: Node3D
 var _grab_at := 0.0
 
+var _skel: Skeleton3D
+var _bone_chest := -1
+var _bag := MeshInstance3D.new()
+
 @onready var visual: Node3D = $Visual
 @onready var pivot: Node3D = $CameraPivot
 @onready var shape: CollisionShape3D = $CollisionShape3D
@@ -56,6 +60,27 @@ func _ready() -> void:
 	visual.rotation.y = -PI / 2
 	anim = setup_model($Visual/Model, body_color)
 	add_animations(anim, EXTRA_ANIMS)
+	# Tenue de voleur : col roulé anthracite, pantalon noir, cagoule, gants.
+	var outfit := ShaderMaterial.new()
+	outfit.shader = preload("res://musee/uniform.gdshader")
+	outfit.set_shader_parameter("shirt", Color(0.2, 0.2, 0.24))
+	outfit.set_shader_parameter("trousers", Color(0.11, 0.11, 0.13))
+	outfit.set_shader_parameter("skin", Color(0.035, 0.035, 0.04))
+	outfit.set_shader_parameter("dark", Color(0.02, 0.02, 0.02))
+	for m in $Visual/Model.find_children("*", "MeshInstance3D", true, false):
+		(m as MeshInstance3D).material_override = outfit
+	# Sac à dos pour les masques, accroché au dos (suit l'os du torse).
+	_skel = $Visual/Model.find_children("*", "Skeleton3D", true, false)[0]
+	_bone_chest = _skel.find_bone("spine_03")
+	var bag_mat := StandardMaterial3D.new()
+	bag_mat.albedo_color = Color(0.22, 0.14, 0.08)
+	bag_mat.roughness = 0.85
+	var bag := BoxMesh.new()
+	bag.size = Vector3(0.32, 0.4, 0.16)
+	_bag.mesh = bag
+	_bag.material_override = bag_mat
+	_bag.top_level = true
+	add_child(_bag)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -65,6 +90,14 @@ func _unhandled_input(event: InputEvent) -> void:
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	elif event is InputEventMouseButton and event.pressed and not DisplayServer.is_touchscreen_available():
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+
+
+func _process(_delta: float) -> void:
+	if _skel == null:
+		return
+	var b := _skel.global_transform * _skel.get_bone_global_pose(_bone_chest)
+	var yaw := Basis(Vector3.UP, visual.rotation.y)
+	_bag.global_transform = Transform3D(yaw, b.origin - yaw.z * -0.17 - Vector3.UP * 0.05)
 
 
 ## Oriente le joueur et sa caméra (yaw en radians, 0 = vers le nord).

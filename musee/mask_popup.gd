@@ -66,6 +66,7 @@ func _ready() -> void:
 	col.custom_minimum_size = Vector2(340, 0)
 	col.add_theme_constant_override("separation", 10)
 	row.add_child(col)
+	_title.add_theme_font_override("font", preload("res://musee/fonts/Cinzel.ttf"))
 	_title.add_theme_font_size_override("font_size", 28)
 	_title.add_theme_color_override("font_color", Color(1, 0.85, 0.5))
 	_material.add_theme_font_size_override("font_size", 14)

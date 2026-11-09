@@ -23,7 +23,9 @@ var _suspicion := 0.0
 var _investigate := 0.0
 var _look_target := Vector3.ZERO
 var _done := false
-var _cone_mat := StandardMaterial3D.new()
+var _cone_mat := ShaderMaterial.new()
+var sees_player := false ## Le gardien voit le joueur en ce moment.
+const GLOW := preload("res://musee/glow.gdshader")
 var _anim: AnimationPlayer
 var _alarm_flash := 0.0
 
@@ -83,6 +85,27 @@ func _dress_up() -> void:
 		n.top_level = true # placés à la main chaque image (suivent les os, orientation du corps)
 		add_child(n)
 	$Lampe.top_level = true
+	$Lampe.spot_angle_attenuation = 0.8
+	# Faisceau visible (halo dans l'air) qui part de la lampe.
+	var beam := MeshInstance3D.new()
+	var beam_mesh := CylinderMesh.new()
+	beam_mesh.top_radius = 0.04
+	beam_mesh.bottom_radius = 1.4
+	beam_mesh.height = 5.0
+	beam_mesh.cap_top = false
+	beam_mesh.cap_bottom = false
+	beam.mesh = beam_mesh
+	var bm := ShaderMaterial.new()
+	bm.shader = GLOW
+	bm.set_shader_parameter("mode", 1)
+	bm.set_shader_parameter("strength", 0.1)
+	bm.set_shader_parameter("tint", Color(1, 0.92, 0.7))
+	bm.set_shader_parameter("beam_length", 5.0)
+	beam.material_override = bm
+	beam.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	beam.rotation_degrees.x = 90
+	beam.position.z = -2.5
+	$Lampe.add_child(beam)
 
 
 func _process(_delta: float) -> void:
@@ -130,6 +153,11 @@ func _mesh(mesh: Mesh, mat: Material, pos: Vector3, rot_deg := Vector3.ZERO) -> 
 	return mi
 
 
+## Niveau de soupçon (0..1), pour la jauge de visibilité.
+func get_suspicion() -> float:
+	return clampf(_suspicion, 0.0, 1.0)
+
+
 func _build_cone() -> void:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
@@ -138,13 +166,14 @@ func _build_cone() -> void:
 	for i in steps:
 		var a0 := -half + 2.0 * half * i / steps
 		var a1 := -half + 2.0 * half * (i + 1) / steps
+		st.set_uv(Vector2(0, (i + 0.5) / steps))
 		st.add_vertex(Vector3.ZERO)
+		st.set_uv(Vector2(1, float(i) / steps))
 		st.add_vertex(Vector3(sin(a0), 0, -cos(a0)) * view_distance)
+		st.set_uv(Vector2(1, float(i + 1) / steps))
 		st.add_vertex(Vector3(sin(a1), 0, -cos(a1)) * view_distance)
 	cone.mesh = st.commit()
-	_cone_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	_cone_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	_cone_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	_cone_mat.shader = GLOW # lumière douce qui s'estompe vers les bords et au loin
 	cone.material_override = _cone_mat
 
 
@@ -248,7 +277,8 @@ func _check_vitrines() -> void:
 func _update_vision(delta: float) -> void:
 	_check_vitrines()
 	_alarm_flash = maxf(0.0, _alarm_flash - delta)
-	if _can_see_player():
+	sees_player = _can_see_player()
+	if sees_player:
 		var dist := global_position.distance_to(player.global_position)
 		var closeness := lerpf(2.0, 0.6, clampf(dist / view_distance, 0.0, 1.0))
 		_suspicion += delta / detect_time * closeness * player.get_visibility()
@@ -257,7 +287,9 @@ func _update_vision(delta: float) -> void:
 	else:
 		_suspicion = maxf(0.0, _suspicion - delta * 0.5)
 
-	_cone_mat.albedo_color = Color(1, 0.9, 0.3, 0.22).lerp(Color(1, 0.1, 0.1, 0.4), clampf(_suspicion, 0, 1))
+	var s := clampf(_suspicion, 0, 1)
+	_cone_mat.set_shader_parameter("tint", Color(1, 0.85, 0.5).lerp(Color(1, 0.15, 0.1), s))
+	_cone_mat.set_shader_parameter("strength", lerpf(0.22, 0.5, s))
 	alert.text = "?!" if _alarm_flash > 0.0 else ("?" if _suspicion > 0.05 else "")
 
 	if _suspicion >= 1.0:
