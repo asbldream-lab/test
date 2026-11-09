@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<title>Le Musée</title>
+<style>body{margin:0;height:100vh;display:flex;align-items:center;justify-content:center;background:#111;color:#eee;font:18px system-ui,sans-serif}</style>
+</head>
+<body>
+<p id="m">Chargement de la dernière version…</p>
+<script>
+// Demande la dernière version sans cache, puis redirige vers son adresse unique.
+fetch("latest.txt?t=" + Date.now(), { cache: "no-store" })
+  .then(r => r.text())
+  .then(v => location.replace("v/" + v.trim() + "/index.html"))
+  .catch(() => { document.getElementById("m").textContent = "Impossible de charger le jeu, recharge la page."; });
+</script>
+</body>
+</html>
