@@ -119,16 +119,30 @@ func _state_normal(delta: float) -> void:
 func try_roll() -> void:
 	if state != State.NORMAL or _cooldown > 0.0 or not enabled:
 		return
+	# La roulade garde l'élan : on part de la vitesse actuelle (marche, course ou arrêt).
+	var entry_speed := Vector2(velocity.x, velocity.z).length()
 	_begin(State.ROLL)
-	_timer = play_once(anim, "Roll")
-	_roll_speed = roll_distance / maxf(_timer, 0.3)
+	_roll_speed = maxf(entry_speed * 1.15, roll_distance / 1.2)
+	# Plus il va vite, plus la roulade est rapide (et l'animation accélérée).
+	anim.speed_scale = clampf(_roll_speed / 4.0, 0.9, 1.5)
+	_timer = play_once(anim, "Roll", 0.25) / anim.speed_scale
+	# On quitte la roulade avant la fin de l'animation pour enchaîner
+	# directement sur la marche/course en fondu, sans temps d'arrêt.
+	_timer *= 0.75
 
 
 func _state_roll(delta: float) -> void:
 	velocity.x = _move_dir.x * _roll_speed
 	velocity.z = _move_dir.z * _roll_speed
+	# Le joueur peut légèrement orienter sa roulade avec le joystick / clavier.
+	var input := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
+	if input.length() > 0.1:
+		var wanted := (Basis(Vector3.UP, pivot.rotation.y) * Vector3(input.x, 0, input.y)).normalized()
+		_move_dir = _move_dir.slerp(wanted, minf(1.0, 3.0 * delta)).normalized()
+		_face(_move_dir, delta)
 	_timer -= delta
-	if _timer <= 0.1:
+	if _timer <= 0.0:
+		anim.speed_scale = 1.0
 		_finish()
 
 
@@ -276,16 +290,18 @@ static func play_loop(player: AnimationPlayer, anim_name: String) -> void:
 	if anim_name.is_empty() or player.current_animation == anim_name:
 		return
 	player.get_animation(anim_name).loop_mode = Animation.LOOP_LINEAR
-	player.play(anim_name, 0.2)
+	player.play(anim_name, 0.25)
 
 
 ## Joue une animation une seule fois et renvoie sa durée.
-static func play_once(player: AnimationPlayer, anim_name: String) -> float:
+static func play_once(player: AnimationPlayer, anim_name: String, blend := 0.15) -> float:
 	anim_name = _resolve(player, anim_name)
 	if anim_name.is_empty():
 		return 0.5
 	var a := player.get_animation(anim_name)
 	a.loop_mode = Animation.LOOP_NONE
-	player.play(anim_name, 0.15)
-	player.seek(0.0, true)
+	if player.current_animation == anim_name:
+		player.seek(0.0, true)
+	else:
+		player.play(anim_name, blend) # fondu depuis l'animation précédente
 	return a.length
