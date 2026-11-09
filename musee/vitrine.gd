@@ -12,6 +12,7 @@ extends Node3D
 		_apply()
 
 
+var mask_id := ""
 var has_mask := true
 var noticed := false ## Le gardien a déjà remarqué que la vitrine est vide.
 

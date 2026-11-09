@@ -10,7 +10,9 @@ signal player_spotted
 @export var view_distance := 7.0
 @export var view_angle := 70.0 ## Angle total du cône de vision, en degrés.
 @export var hearing_radius := 5.0 ## Distance à laquelle il entend le joueur courir.
-@export var detect_time := 0.8 ## Secondes pour repérer le joueur à distance moyenne.
+@export var detect_time := 0.8
+@export var spin_speed := 0.0 ## Si non nul : tourne sur place (rad/s) au lieu de patrouiller.
+@export var start_index := 0 ## Point de ronde de départ. ## Secondes pour repérer le joueur à distance moyenne.
 
 const RAY_MASK := 1 | 2 # monde + joueur (le verre des vitrines est ignoré)
 
@@ -31,6 +33,7 @@ var _alarm_flash := 0.0
 
 func _ready() -> void:
 	player = get_tree().get_first_node_in_group("player") as MuseumPlayer
+	_index = start_index
 	_anim = MuseumPlayer.setup_model($Visual/Model, body_color)
 	_build_cone()
 
@@ -81,6 +84,11 @@ func _physics_process(delta: float) -> void:
 
 
 func _patrol(delta: float) -> void:
+	if spin_speed != 0.0:
+		velocity.x = 0
+		velocity.z = 0
+		rotation.y += spin_speed * delta
+		return
 	if waypoints.is_empty():
 		return
 	var d := waypoints[_index] - global_position

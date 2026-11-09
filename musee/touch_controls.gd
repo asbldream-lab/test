@@ -38,7 +38,7 @@ func _ready() -> void:
 
 
 func _exit_tree() -> void:
-	for a in ["move_left", "move_right", "move_forward", "move_back", "run", "crouch", "prone", "roll", "interact"]:
+	for a in ["move_left", "move_right", "move_forward", "move_back", "run", "crouch", "roll", "interact"]:
 		Input.action_release(a)
 
 
@@ -55,7 +55,6 @@ func _layout() -> void:
 	var row1 := s.y - m - bh * 2 - gap
 	var row2 := s.y - m - bh
 	_buttons = {
-		"prone": Rect2(col1, row1 - gap - bh, bw, bh),
 		"roll": Rect2(col1, row1, bw, bh),
 		"take": Rect2(col1, row2, bw, bh),
 		"run": Rect2(col2, row1, bw, bh),
@@ -72,8 +71,6 @@ func _input(event: InputEvent) -> void:
 		if event.pressed:
 			if _buttons.roll.has_point(p):
 				player.try_roll()
-			elif _buttons.prone.has_point(p):
-				player.toggle_prone()
 			elif _buttons.take.has_point(p):
 				player.try_interact()
 			elif _buttons.run.has_point(p):
@@ -162,8 +159,6 @@ func _draw() -> void:
 	_button("run", "COURIR", "(activé - bruyant !)" if _run_on else "(appuie : on / off)", _run_on)
 	_button("crouch", "S'ACCROUPIR", "(activé)" if _crouch_on else "(en courant : glissade)", _crouch_on)
 	_button("roll", "ROULADE", "(bond rapide)", false)
-	var prone := player != null and player.is_prone
-	_button("prone", "RAMPER", "(activé)" if prone else "(appuie : on / off)", prone)
 	var near := player != null and player.nearest_vitrine() != null
 	_button("take", "PRENDRE", "(masque à portée !)" if near else "(près d'une vitrine)", near)
 	_button("restart", "REJOUER", "", false)

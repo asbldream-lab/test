@@ -16,8 +16,8 @@ enum State { NORMAL, ACTION, ROLL, SLIDE }
 const EXTRA_ANIMS := preload("res://musee/persos/anims2.glb")
 const COOLDOWN := 1.0
 const ROLL_ANIM_SPEED := 1.6 ## Roulade jouée 1,6x plus vite (plus nerveuse).
-const ROLL_SPEED := 5.76 * 1.3 ## Vitesse réelle de l'animation Roll (root motion), accélérée.
-const ROLL_MOVE_TIME := 0.87 / ROLL_ANIM_SPEED ## Durée pendant laquelle la roulade avance.
+const ROLL_SPEED := 5.76 ## Vitesse réelle de l'animation Roll (root motion).
+const ROLL_MOVE_TIME := 0.87 ## Durée pendant laquelle la roulade avance (à vitesse 1).
 const PRONE_DROP := 0.0 ## Décalage vertical du modèle en reptation (la nage est déjà au niveau du sol).
 const ACCEL := 25.0 ## Accélération/freinage au sol (m/s²), évite les à-coups.
 
@@ -35,6 +35,9 @@ var _timer := 0.0
 var _cooldown := 0.0
 var _move_dir := Vector3.RIGHT
 var _roll_t := 0.0
+var _roll_speed := 0.0
+var _roll_move_time := 0.0
+var _cam_h := 1.5
 var _slide_vel := 0.0
 var _slide_phase := 0
 var _vitrine: Node3D
@@ -63,6 +66,13 @@ func _unhandled_input(event: InputEvent) -> void:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 
+## Oriente le joueur et sa caméra (yaw en radians, 0 = vers le nord).
+func set_facing(yaw: float) -> void:
+	pivot.rotation.y = yaw
+	visual.rotation.y = yaw
+	_move_dir = Vector3(-sin(yaw), 0, -cos(yaw))
+
+
 ## Tourne la caméra (souris ou glissement du doigt).
 func rotate_camera(relative: Vector2) -> void:
 	pivot.rotation.y -= relative.x * mouse_sensitivity
@@ -73,6 +83,8 @@ func _physics_process(delta: float) -> void:
 	if not is_on_floor():
 		velocity.y -= 9.8 * delta
 	_cooldown = maxf(0.0, _cooldown - delta)
+	# Hauteur de caméra lissée : plus de sursaut en sortie de roulade / glissade.
+	pivot.position.y = lerpf(pivot.position.y, _cam_h, minf(1.0, 6.0 * delta))
 	match state:
 		State.NORMAL: _state_normal(delta)
 		State.ACTION: _state_action(delta)
@@ -91,13 +103,6 @@ func _state_normal(delta: float) -> void:
 		_move_dir = dir.normalized()
 	var crouch_held := enabled and Input.is_action_pressed("crouch")
 	var run_held := enabled and Input.is_action_pressed("run")
-	if enabled and Input.is_action_just_pressed("prone"):
-		toggle_prone()
-	if is_prone and Input.is_action_just_pressed("crouch"):
-		is_prone = false # s'accroupir depuis le sol = se relever en position accroupie
-	if is_prone:
-		_state_prone(dir, moving, delta)
-		return
 
 	if enabled:
 		# Glissade : s'accroupir pendant la course.
@@ -136,9 +141,14 @@ func _state_normal(delta: float) -> void:
 func try_roll() -> void:
 	if state != State.NORMAL or _cooldown > 0.0 or not enabled or is_prone:
 		return
+	# Vitesse et longueur selon l'élan : marche = roulade douce (~3 m), course = rapide (~4 m).
+	var t := clampf(Vector2(velocity.x, velocity.z).length() / run_speed, 0.0, 1.0)
+	var k := lerpf(1.0, ROLL_ANIM_SPEED, t)
+	_roll_speed = ROLL_SPEED * k * lerpf(0.6, 0.8, t)
+	_roll_move_time = ROLL_MOVE_TIME / k
 	_begin(State.ROLL)
-	_timer = play_once(anim, "Roll", 0.12) / ROLL_ANIM_SPEED # fondu depuis la marche/course
-	anim.speed_scale = ROLL_ANIM_SPEED
+	_timer = play_once(anim, "Roll", 0.12) / k # fondu depuis la marche/course
+	anim.speed_scale = k
 	_roll_t = 0.0
 
 
@@ -147,8 +157,8 @@ func _state_roll(delta: float) -> void:
 	var input := Input.get_vector("move_left", "move_right", "move_forward", "move_back") if enabled else Vector2.ZERO
 	# Déplacement réel de l'animation (extrait de la version root motion du pack) :
 	# 5,76 m/s pendant 0,87 s, puis il se relève sur place.
-	var rolling := _roll_t < ROLL_MOVE_TIME
-	var v := ROLL_SPEED if rolling else 0.0
+	var rolling := _roll_t < _roll_move_time
+	var v := _roll_speed if rolling else 0.0
 	velocity.x = _move_dir.x * v
 	velocity.z = _move_dir.z * v
 	if input.length() > 0.1:
@@ -253,29 +263,9 @@ func _set_low(value: bool) -> void:
 	_height = h
 	(shape.shape as CapsuleShape3D).height = h
 	shape.position.y = h / 2.0
-	pivot.position.y = 0.6 if is_prone else (0.9 if value else 1.5)
+	_cam_h = 0.9 if _low else 1.5 # la caméra suit en douceur (voir _physics_process)
 	$Visual/Model.position.y = -PRONE_DROP if is_prone else 0.0
 
-
-# --- Ramper ----------------------------------------------------------------
-
-func toggle_prone() -> void:
-	if state != State.NORMAL or not enabled:
-		return
-	is_prone = not is_prone
-
-
-func _state_prone(dir: Vector3, moving: bool, delta: float) -> void:
-	is_crouching = false
-	is_running = false
-	_set_low(true)
-	velocity.x = move_toward(velocity.x, dir.x * crawl_speed, ACCEL * delta)
-	velocity.z = move_toward(velocity.z, dir.z * crawl_speed, ACCEL * delta)
-	if moving:
-		_face(_move_dir, delta)
-	# Animation de nage, corps à plat au sol = reptation ; figée à l'arrêt.
-	play_loop(anim, "Swim_Fwd_Loop")
-	anim.speed_scale = 0.7 if moving else 0.0
 
 
 ## Point que le gardien doit voir pour repérer le joueur (plus bas quand il est baissé).

@@ -3,18 +3,6 @@ extends Control
 ## nom et son histoire. Met le jeu en pause jusqu'à « Continuer ».
 ## Les masques et leurs histoires sont inventés pour le jeu.
 
-const INFO := {
-	"Vitrine1": ["Le Gardien des Pluies", "Bois d'ébène sculpté, pigments de kaolin",
-		"On raconte qu'il était porté une seule nuit par an, quand le village attendait la première pluie. Ses bandes blanches imitent les traces de l'eau sur la roche."],
-	"Vitrine2": ["La Dame de Lune", "Bois clair recouvert d'argile blanche",
-		"Masque de la conteuse : celle qui le portait avait le droit de raconter les histoires interdites le jour. Son front rouge rappelle le soleil qui se couche avant le récit."],
-	"Vitrine3": ["Le Rieur du Marché", "Bois d'iroko, traits peints au charbon",
-		"Porté pendant les grandes fêtes du marché, il se moquait des puissants sans que personne n'ait le droit de se fâcher. Les anciens disent qu'il fallait rire en le voyant passer."],
-	"Vitrine4": ["Le Forgeron d'Or", "Bois noirci au feu, incrustations dorées",
-		"Il appartenait à une famille de forgerons. Le doré représente le métal en fusion, et l'on disait que le masque protégeait les mains de celui qui travaillait le feu."],
-	"Vitrine5": ["L'Esprit de la Savane", "Bois rouge, motifs blancs à la chaux",
-		"Masque des messagers : il accompagnait ceux qui partaient loin annoncer une naissance ou une alliance. Ses marques blanches sont les chemins qu'il devait suivre."],
-}
 
 var _pivot := Node3D.new()
 var _title := Label.new()
@@ -97,7 +85,7 @@ func _ready() -> void:
 
 
 func show_mask(vitrine: Node3D) -> void:
-	var info: Array = INFO.get(String(vitrine.name), ["Masque inconnu", "", ""])
+	var info: Array = Levels.MASKS.get(vitrine.mask_id, ["Masque inconnu", "", ""])
 	_title.text = info[0]
 	_material.text = info[1]
 	_story.text = info[2]
