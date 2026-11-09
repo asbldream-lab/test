@@ -77,8 +77,8 @@ func _ready() -> void:
 func _build() -> void:
 	var w: float = _data.size.x
 	var d: float = _data.size.y
-	var floor_mat := _mat(Color(0.42, 0.28, 0.18), 0.5)
-	var wall_mat := _mat(Color(0.55, 0.2, 0.17), 0.9)
+	var floor_mat := _parquet()
+	var wall_mat := _mat(Color(0.5, 0.17, 0.15), 0.85)
 	var col_mat := _mat(Color(0.78, 0.72, 0.62), 0.8)
 	_exit_mat.emission_enabled = true
 
@@ -92,17 +92,15 @@ func _build() -> void:
 		_box(Vector3(r[0], WALL_H / 2, r[1]), Vector3(r[2], WALL_H, r[3]), wall_mat)
 	for c in _data.columns:
 		_column(Vector3(c[0], 0, c[1]), col_mat)
+	_box(Vector3(0, WALL_H + 0.1, 0), Vector3(w + 0.8, 0.2, d + 0.8), _mat(Color(0.82, 0.78, 0.7), 0.9)) # plafond
+	_decor(w, d)
 
 	_door(_data.entry, _mat(Color(0.3, 0.18, 0.1), 0.8))
 	_door(_data.exit, _exit_mat)
 	_exit_area(_data.exit)
 	_paintings(w, d)
 
-	var sun := DirectionalLight3D.new()
-	sun.rotation_degrees = Vector3(-65, 30, 0)
-	sun.light_color = Color(1, 0.92, 0.8)
-	sun.light_energy = 0.35
-	add_child(sun)
+	_lighting(w, d)
 
 	for v in _data.vitrines:
 		var m: Array = Levels.MASKS[v[3]]
@@ -141,14 +139,20 @@ func _mat(color: Color, rough: float) -> StandardMaterial3D:
 func _box(pos: Vector3, size: Vector3, mat: Material) -> void:
 	var body := StaticBody3D.new()
 	body.position = pos
-	var mesh := MeshInstance3D.new()
-	mesh.mesh = BoxMesh.new()
-	mesh.mesh.size = size
-	mesh.material_override = mat
+	var nx := maxi(1, ceili(size.x / 6.0))
+	var nz := maxi(1, ceili(size.z / 6.0))
+	var piece := Vector3(size.x / nx, size.y, size.z / nz)
+	for ix in nx:
+		for iz in nz:
+			var mesh := MeshInstance3D.new()
+			mesh.mesh = BoxMesh.new()
+			mesh.mesh.size = piece
+			mesh.material_override = mat
+			mesh.position = Vector3((ix + 0.5) * piece.x - size.x / 2, 0, (iz + 0.5) * piece.z - size.z / 2)
+			body.add_child(mesh)
 	var col := CollisionShape3D.new()
 	col.shape = BoxShape3D.new()
 	col.shape.size = size
-	body.add_child(mesh)
 	body.add_child(col)
 	add_child(body)
 
@@ -181,9 +185,11 @@ func _paintings(w: float, d: float) -> void:
 	var doors: Array[Vector2] = [Vector2(_data.entry[0], _data.entry[1]), Vector2(_data.exit[0], _data.exit[1])]
 	# Images fournies (png/jpg/webp) dans res://musee/tableaux/ : accrochées en priorité.
 	var images: Array[Texture2D] = []
+	var titles: Array[String] = []
 	for f in ResourceLoader.list_directory("res://musee/tableaux/"):
 		if f.get_extension().to_lower() in ["png", "jpg", "jpeg", "webp"]:
 			images.append(load("res://musee/tableaux/" + f))
+			titles.append(f.get_basename())
 	var img_i := current * 5 # chaque niveau commence à une image différente
 	for side in ["N", "S", "E", "W"]:
 		var length := w if side in ["N", "S"] else d
@@ -202,9 +208,11 @@ func _paintings(w: float, d: float) -> void:
 			holder.position = pos + inward * 0.04
 			holder.rotation.y = atan2(inward.x, inward.z) # +z local = vers la pièce
 			var tex: Texture2D = null
+			var title := "Œuvre anonyme"
 			var size := Vector2(rng.randf_range(1.0, 1.8), rng.randf_range(0.8, 1.3))
 			if not images.is_empty():
 				tex = images[img_i % images.size()]
+				title = titles[img_i % images.size()]
 				img_i += 1
 				var aspect := float(tex.get_width()) / tex.get_height()
 				size = Vector2(1.2 * aspect, 1.2) if aspect <= 1.6 else Vector2(2.0, 2.0 / aspect)
@@ -224,6 +232,28 @@ func _paintings(w: float, d: float) -> void:
 			else:
 				canvas.material_override = _canvas(rng)
 			holder.add_child(canvas)
+			# Cartel sous le tableau.
+			var plate := _mesh_at(_boxm(Vector3(0.42, 0.14, 0.02)), _mat(Color(0.92, 0.9, 0.84), 0.6), Vector3(0, -size.y / 2 - 0.25, 0.01))
+			holder.add_child(plate)
+			var label := Label3D.new()
+			label.text = title
+			label.font_size = 16
+			label.pixel_size = 0.0015
+			label.width = 260
+			label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			label.modulate = Color(0.1, 0.08, 0.06)
+			label.outline_size = 0
+			label.position = Vector3(0, -size.y / 2 - 0.25, 0.022)
+			holder.add_child(label)
+			# Spot de galerie qui éclaire le tableau depuis le plafond.
+			var spot := SpotLight3D.new()
+			spot.light_color = Color(1, 0.9, 0.75)
+			spot.light_energy = 2.0
+			spot.spot_range = 3.2
+			spot.spot_angle = 28
+			spot.position = Vector3(0, 1.5, 1.1)
+			spot.rotation_degrees = Vector3(-55, 0, 0)
+			holder.add_child(spot)
 			add_child(holder)
 
 
@@ -242,6 +272,175 @@ func _canvas(rng: RandomNumberGenerator) -> StandardMaterial3D:
 	var m := _mat(Color.WHITE, 0.8)
 	m.albedo_texture = tex
 	return m
+
+
+# --- Décor et éclairage -------------------------------------------------------
+
+func _boxm(size: Vector3) -> BoxMesh:
+	var b := BoxMesh.new()
+	b.size = size
+	return b
+
+
+func _cylm(r: float, h: float) -> CylinderMesh:
+	var c := CylinderMesh.new()
+	c.top_radius = r
+	c.bottom_radius = r
+	c.height = h
+	return c
+
+
+func _mesh_at(mesh: Mesh, mat: Material, pos: Vector3) -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	mi.mesh = mesh
+	mi.material_override = mat
+	mi.position = pos
+	return mi
+
+
+func _emissive(c: Color, energy: float) -> StandardMaterial3D:
+	var m := _mat(c, 0.5)
+	m.emission_enabled = true
+	m.emission = c
+	m.emission_energy_multiplier = energy
+	return m
+
+
+## Parquet : bruit étiré façon veinage du bois.
+func _parquet() -> StandardMaterial3D:
+	var noise := FastNoiseLite.new()
+	noise.frequency = 0.02
+	noise.fractal_octaves = 3
+	var ramp := Gradient.new()
+	ramp.set_color(0, Color(0.3, 0.19, 0.11))
+	ramp.set_color(1, Color(0.5, 0.33, 0.2))
+	var tex := NoiseTexture2D.new()
+	tex.noise = noise
+	tex.color_ramp = ramp
+	tex.width = 256
+	tex.height = 256
+	tex.seamless = true
+	var m := _mat(Color.WHITE, 0.4)
+	m.albedo_texture = tex
+	m.uv1_triplanar = true
+	m.uv1_scale = Vector3(0.25, 0.25, 1.5) # étiré dans un sens = lames de bois
+	return m
+
+
+## Ambiance de musée la nuit : plafonniers, halo léger, lumière chaude et sombre.
+func _lighting(w: float, d: float) -> void:
+	var env: Environment = $WorldEnvironment.environment
+	env.background_color = Color(0.02, 0.02, 0.025)
+	env.ambient_light_color = Color(0.45, 0.4, 0.38)
+	env.ambient_light_energy = 0.35
+	env.tonemap_mode = Environment.TONE_MAPPER_ACES
+	env.tonemap_exposure = 1.1
+	env.glow_enabled = true
+	env.glow_intensity = 0.6
+	env.glow_bloom = 0.05
+	env.fog_enabled = true
+	env.fog_light_color = Color(0.25, 0.22, 0.2)
+	env.fog_density = 0.008
+	var fixture := _emissive(Color(1, 0.9, 0.7), 3.0)
+	var nx := maxi(1, roundi(w / 7.0))
+	var nz := maxi(1, roundi(d / 7.0))
+	for ix in nx:
+		for iz in nz:
+			var p := Vector3((ix + 0.5) * w / nx - w / 2, WALL_H - 0.05, (iz + 0.5) * d / nz - d / 2)
+			add_child(_mesh_at(_cylm(0.35, 0.06), fixture, p))
+			var light := OmniLight3D.new()
+			light.position = p - Vector3(0, 0.4, 0)
+			light.light_color = Color(1, 0.88, 0.7)
+			light.light_energy = 0.95
+			light.omni_range = 7.5
+			light.omni_attenuation = 1.4
+			add_child(light)
+
+
+func _decor(w: float, d: float) -> void:
+	# Plinthes sombres au bas des murs extérieurs.
+	var base := _mat(Color(0.15, 0.08, 0.06), 0.5)
+	for p in [[Vector3(0, 0.08, -d / 2 + 0.025), Vector3(w, 0.16, 0.05)], [Vector3(0, 0.08, d / 2 - 0.025), Vector3(w, 0.16, 0.05)],
+			[Vector3(-w / 2 + 0.025, 0.08, 0), Vector3(0.05, 0.16, d)], [Vector3(w / 2 - 0.025, 0.08, 0), Vector3(0.05, 0.16, d)]]:
+		add_child(_mesh_at(_boxm(p[1]), base, p[0]))
+	# Tapis.
+	var rug := _mat(Color(0.35, 0.06, 0.07), 1.0)
+	var rug_border := _mat(Color(0.75, 0.6, 0.3), 1.0)
+	for r in _data.rugs:
+		add_child(_mesh_at(_boxm(Vector3(r[2], 0.012, r[3])), rug_border, Vector3(r[0], 0.006, r[1])))
+		add_child(_mesh_at(_boxm(Vector3(r[2] - 0.2, 0.014, r[3] - 0.2)), rug, Vector3(r[0], 0.008, r[1])))
+	# Bancs de musée.
+	var wood := _mat(Color(0.3, 0.18, 0.1), 0.5)
+	var metal := _mat(Color(0.1, 0.1, 0.1), 0.3)
+	for b in _data.benches:
+		var bench := StaticBody3D.new()
+		bench.position = Vector3(b[0], 0, b[1])
+		bench.rotation_degrees.y = b[2]
+		bench.add_child(_mesh_at(_boxm(Vector3(1.8, 0.08, 0.5)), wood, Vector3(0, 0.45, 0)))
+		for x in [-0.75, 0.75]:
+			bench.add_child(_mesh_at(_boxm(Vector3(0.06, 0.42, 0.45)), metal, Vector3(x, 0.21, 0)))
+		var col := CollisionShape3D.new()
+		col.shape = BoxShape3D.new()
+		col.shape.size = Vector3(1.8, 0.5, 0.5)
+		col.position.y = 0.25
+		bench.add_child(col)
+		add_child(bench)
+	# Plantes dans les coins.
+	var pot := _mat(Color(0.6, 0.3, 0.2), 0.8)
+	var leaves := _mat(Color(0.12, 0.3, 0.1), 0.9)
+	for c in [Vector2(-1, -1), Vector2(1, -1), Vector2(-1, 1), Vector2(1, 1)]:
+		var p := Vector3(c.x * (w / 2 - 0.7), 0, c.y * (d / 2 - 0.7))
+		var plant := StaticBody3D.new()
+		plant.position = p
+		plant.add_child(_mesh_at(_cylm(0.28, 0.5), pot, Vector3(0, 0.25, 0)))
+		var foliage := SphereMesh.new()
+		foliage.radius = 0.45
+		foliage.height = 1.1
+		plant.add_child(_mesh_at(foliage, leaves, Vector3(0, 0.95, 0)))
+		var col := CollisionShape3D.new()
+		col.shape = CylinderShape3D.new()
+		col.shape.radius = 0.3
+		col.shape.height = 1.4
+		col.position.y = 0.7
+		plant.add_child(col)
+		add_child(plant)
+	# Cordons de sécurité devant une vitrine sur deux.
+	var post_mat := _mat(Color(0.8, 0.65, 0.3), 0.3)
+	post_mat.metallic = 0.8
+	var rope := _mat(Color(0.55, 0.05, 0.08), 0.8)
+	for i in range(0, _data.vitrines.size(), 2):
+		var v: Array = _data.vitrines[i]
+		var holder := Node3D.new()
+		holder.position = Vector3(v[0], 0, v[1])
+		holder.rotation_degrees.y = v[2]
+		for x in [-0.75, 0.75]:
+			holder.add_child(_mesh_at(_cylm(0.03, 0.9), post_mat, Vector3(x, 0.45, 1.0)))
+		holder.add_child(_mesh_at(_boxm(Vector3(1.5, 0.03, 0.03)), rope, Vector3(0, 0.82, 1.0)))
+		add_child(holder)
+	# Panneau SORTIE lumineux au-dessus de la porte de sortie.
+	var e: Array = _data.exit
+	var sign_holder := Node3D.new()
+	var inward := _inward(e[2])
+	sign_holder.position = Vector3(e[0], 2.85, e[1]) + inward * 0.06
+	sign_holder.rotation.y = atan2(inward.x, inward.z)
+	sign_holder.add_child(_mesh_at(_boxm(Vector3(0.9, 0.3, 0.06)), _emissive(Color(0.1, 0.8, 0.3), 2.5), Vector3.ZERO))
+	var txt := Label3D.new()
+	txt.text = "SORTIE"
+	txt.font_size = 48
+	txt.pixel_size = 0.004
+	txt.position.z = 0.035
+	txt.outline_size = 0
+	sign_holder.add_child(txt)
+	add_child(sign_holder)
+	# Caméras de surveillance (décor) dans deux coins.
+	var cam_mat := _mat(Color(0.85, 0.85, 0.85), 0.4)
+	for c in [Vector2(-1, -1), Vector2(1, 1)]:
+		var cam := Node3D.new()
+		var cpos := Vector3(c.x * (w / 2 - 0.35), WALL_H - 0.4, c.y * (d / 2 - 0.35))
+		cam.transform = Transform3D(Basis.looking_at(Vector3.ZERO - cpos), cpos) # vise le centre
+		cam.add_child(_mesh_at(_boxm(Vector3(0.18, 0.15, 0.4)), cam_mat, Vector3.ZERO))
+		cam.add_child(_mesh_at(_boxm(Vector3(0.05, 0.05, 0.02)), _emissive(Color(1, 0.1, 0.1), 4.0), Vector3(0.05, 0.05, -0.21)))
+		add_child(cam)
 
 
 ## Vecteur vers l'intérieur de la pièce pour un mur donné.

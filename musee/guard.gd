@@ -35,7 +35,99 @@ func _ready() -> void:
 	player = get_tree().get_first_node_in_group("player") as MuseumPlayer
 	_index = start_index
 	_anim = MuseumPlayer.setup_model($Visual/Model, body_color)
+	_dress_up()
 	_build_cone()
+
+
+# --- Uniforme et accessoires ---------------------------------------------------
+
+const UNIFORM := preload("res://musee/uniform.gdshader")
+
+var _skel: Skeleton3D
+var _bone_head := -1
+var _bone_chest := -1
+var _bone_hand := -1
+var _cap := Node3D.new()
+var _badge := MeshInstance3D.new()
+var _torch := Node3D.new()
+
+
+## Habille le mannequin en gardien : uniforme, casquette, badge, lampe de poche.
+func _dress_up() -> void:
+	var mat := ShaderMaterial.new()
+	mat.shader = UNIFORM
+	for m in $Visual/Model.find_children("*", "MeshInstance3D", true, false):
+		(m as MeshInstance3D).material_override = mat
+	_skel = $Visual/Model.find_children("*", "Skeleton3D", true, false)[0]
+	_bone_head = _skel.find_bone("Head")
+	_bone_chest = _skel.find_bone("spine_03")
+	_bone_hand = _skel.find_bone("hand_r")
+
+	var navy := _std(Color(0.06, 0.08, 0.18), 0.6)
+	var black := _std(Color(0.02, 0.02, 0.02), 0.3)
+	_cap.add_child(_mesh(_cyl(0.13, 0.14, 0.09), navy, Vector3.ZERO))
+	_cap.add_child(_mesh(_boxm(Vector3(0.2, 0.015, 0.12)), black, Vector3(0, -0.035, -0.15)))
+	var gold := _std(Color(0.9, 0.72, 0.25), 0.25)
+	gold.metallic = 0.9
+	_cap.add_child(_mesh(_boxm(Vector3(0.05, 0.04, 0.01)), gold, Vector3(0, 0.0, -0.135)))
+	_badge.mesh = _boxm(Vector3(0.06, 0.07, 0.01))
+	_badge.material_override = gold
+	# Lampe de poche : corps noir + verre lumineux.
+	_torch.add_child(_mesh(_cyl(0.025, 0.03, 0.22), black, Vector3.ZERO, Vector3(-90, 0, 0)))
+	var lens := _std(Color(1, 0.95, 0.8), 0.1)
+	lens.emission_enabled = true
+	lens.emission = Color(1, 0.95, 0.75)
+	lens.emission_energy_multiplier = 4.0
+	_torch.add_child(_mesh(_cyl(0.035, 0.035, 0.02), lens, Vector3(0, 0, -0.11), Vector3(-90, 0, 0)))
+	for n in [_cap, _badge, _torch]:
+		n.top_level = true # placés à la main chaque image (suivent les os, orientation du corps)
+		add_child(n)
+	$Lampe.top_level = true
+
+
+func _process(_delta: float) -> void:
+	if _skel == null:
+		return
+	var yaw := Basis(Vector3.UP, rotation.y)
+	var fwd := -yaw.z
+	var bone := func(i: int) -> Vector3: return _skel.global_transform * _skel.get_bone_global_pose(i).origin
+	_cap.global_transform = Transform3D(yaw, bone.call(_bone_head) + Vector3.UP * 0.2 + fwd * 0.02)
+	_badge.global_transform = Transform3D(yaw, bone.call(_bone_chest) + Vector3.UP * 0.06 + fwd * 0.14 - yaw.x * 0.09)
+	# Lampe dans la main droite, faisceau stable dans la direction du regard, un peu vers le bas.
+	var aim := yaw * Basis(Vector3.RIGHT, deg_to_rad(-12))
+	var hand: Vector3 = bone.call(_bone_hand) + fwd * 0.08
+	_torch.global_transform = Transform3D(aim, hand)
+	$Lampe.global_transform = Transform3D(aim, hand + aim * Vector3(0, 0, -0.13))
+
+
+func _std(c: Color, rough: float) -> StandardMaterial3D:
+	var m := StandardMaterial3D.new()
+	m.albedo_color = c
+	m.roughness = rough
+	return m
+
+
+func _cyl(top: float, bottom: float, height: float) -> CylinderMesh:
+	var c := CylinderMesh.new()
+	c.top_radius = top
+	c.bottom_radius = bottom
+	c.height = height
+	return c
+
+
+func _boxm(size: Vector3) -> BoxMesh:
+	var b := BoxMesh.new()
+	b.size = size
+	return b
+
+
+func _mesh(mesh: Mesh, mat: Material, pos: Vector3, rot_deg := Vector3.ZERO) -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	mi.mesh = mesh
+	mi.material_override = mat
+	mi.position = pos
+	mi.rotation_degrees = rot_deg
+	return mi
 
 
 func _build_cone() -> void:
