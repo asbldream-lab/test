@@ -15,7 +15,8 @@ func _enter_tree() -> void:
 		"move_left": [KEY_A, KEY_LEFT],
 		"move_right": [KEY_D, KEY_RIGHT],
 		"run": [KEY_SHIFT],
-		"crouch": [KEY_CTRL, KEY_C],
+		"crouch": [KEY_C], # pas Ctrl : sur Mac, Ctrl+flèches change de bureau
+		"prone": [KEY_X],
 		"restart": [KEY_R],
 		"interact": [KEY_E],
 		"roll": [KEY_SPACE],
@@ -34,11 +35,14 @@ var _touch := DisplayServer.is_touchscreen_available()
 
 
 func _ready() -> void:
+	# Relâche les actions restées "enfoncées" (ex. touche avalée par le système avant la mort).
+	for a in InputMap.get_actions():
+		Input.action_release(a)
 	message.text = ""
 	guard.player_spotted.connect(_on_spotted)
 	$Exit.body_entered.connect(_on_exit)
 	player.mask_taken.connect(_on_mask_taken)
-	$HUD/Aide.text = "ZQSD : marcher   Maj : courir (bruyant)   Ctrl / C : s'accroupir   Ctrl en courant : glissade\n" \
+	$HUD/Aide.text = "ZQSD : marcher   Maj : courir (bruyant)   C : s'accroupir   C en courant : glissade   X : ramper\n" \
 		+ "Espace : roulade   E : prendre un masque   R : recommencer   Échap : libérer la souris\n" \
 		+ "Objectif : vole les %d masques puis sors par la porte, sans te faire voir." % _total_masks()
 	_counter.position = Vector2(16, 100) if not _touch else Vector2(16, 12)

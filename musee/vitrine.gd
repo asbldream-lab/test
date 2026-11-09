@@ -24,8 +24,7 @@ func _ready() -> void:
 ## Le voleur prend le masque : la vitrine se retrouve ouverte et vide.
 func take_mask() -> void:
 	has_mask = false
-	$Mask.hide()
-	$Verre/Mesh.hide()
+	$Mask.hide() # la vitrine reste en place, vide
 
 
 func _apply() -> void:

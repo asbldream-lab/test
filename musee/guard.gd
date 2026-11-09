@@ -151,7 +151,7 @@ func _update_vision(delta: float) -> void:
 	if _can_see_player():
 		var dist := global_position.distance_to(player.global_position)
 		var closeness := lerpf(2.0, 0.6, clampf(dist / view_distance, 0.0, 1.0))
-		_suspicion += delta / detect_time * closeness
+		_suspicion += delta / detect_time * closeness * player.get_visibility()
 		_investigate = maxf(_investigate, 0.4)
 		_look_target = player.global_position
 	else:

@@ -6,6 +6,7 @@ signal mask_taken(total: int, vitrine: Node3D)
 @export var walk_speed := 2.0
 @export var run_speed := 5.5
 @export var crouch_speed := 1.3
+@export var crawl_speed := 0.8
 @export var slide_speed := 7.0
 @export var mouse_sensitivity := 0.003
 @export var body_color := Color(0.15, 0.15, 0.18)
@@ -14,18 +15,22 @@ enum State { NORMAL, ACTION, ROLL, SLIDE }
 
 const EXTRA_ANIMS := preload("res://musee/persos/anims2.glb")
 const COOLDOWN := 1.0
-const ROLL_SPEED := 5.76 ## Vitesse réelle de l'animation Roll (root motion).
-const ROLL_MOVE_TIME := 0.87 ## Durée pendant laquelle la roulade avance.
+const ROLL_ANIM_SPEED := 1.6 ## Roulade jouée 1,6x plus vite (plus nerveuse).
+const ROLL_SPEED := 5.76 * 1.3 ## Vitesse réelle de l'animation Roll (root motion), accélérée.
+const ROLL_MOVE_TIME := 0.87 / ROLL_ANIM_SPEED ## Durée pendant laquelle la roulade avance.
+const PRONE_DROP := 0.0 ## Décalage vertical du modèle en reptation (la nage est déjà au niveau du sol).
 const ACCEL := 25.0 ## Accélération/freinage au sol (m/s²), évite les à-coups.
 
 var state := State.NORMAL
 var is_crouching := false
 var is_running := false
+var is_prone := false
 var enabled := true
 var masks := 0
 var anim: AnimationPlayer
 
 var _low := false
+var _height := 1.8
 var _timer := 0.0
 var _cooldown := 0.0
 var _move_dir := Vector3.RIGHT
@@ -86,6 +91,13 @@ func _state_normal(delta: float) -> void:
 		_move_dir = dir.normalized()
 	var crouch_held := enabled and Input.is_action_pressed("crouch")
 	var run_held := enabled and Input.is_action_pressed("run")
+	if enabled and Input.is_action_just_pressed("prone"):
+		toggle_prone()
+	if is_prone and Input.is_action_just_pressed("crouch"):
+		is_prone = false # s'accroupir depuis le sol = se relever en position accroupie
+	if is_prone:
+		_state_prone(dir, moving, delta)
+		return
 
 	if enabled:
 		# Glissade : s'accroupir pendant la course.
@@ -110,6 +122,7 @@ func _state_normal(delta: float) -> void:
 	if moving:
 		_face(_move_dir, delta)
 
+	anim.speed_scale = 1.0
 	if is_crouching:
 		play_loop(anim, "Crouch_Fwd_Loop" if moving else "Crouch_Idle_Loop")
 	elif is_running:
@@ -121,10 +134,11 @@ func _state_normal(delta: float) -> void:
 # --- Roulade ---------------------------------------------------------------
 
 func try_roll() -> void:
-	if state != State.NORMAL or _cooldown > 0.0 or not enabled:
+	if state != State.NORMAL or _cooldown > 0.0 or not enabled or is_prone:
 		return
 	_begin(State.ROLL)
-	_timer = play_once(anim, "Roll", 0.15) # fondu depuis la marche/course
+	_timer = play_once(anim, "Roll", 0.12) / ROLL_ANIM_SPEED # fondu depuis la marche/course
+	anim.speed_scale = ROLL_ANIM_SPEED
 	_roll_t = 0.0
 
 
@@ -177,7 +191,7 @@ func _state_slide(delta: float) -> void:
 # --- Prendre un masque -----------------------------------------------------
 
 func try_interact() -> void:
-	if state != State.NORMAL or not enabled:
+	if state != State.NORMAL or not enabled or is_prone:
 		return
 	var v := nearest_vitrine()
 	if v == null:
@@ -222,6 +236,7 @@ func _begin(new_state: State) -> void:
 
 
 func _finish() -> void:
+	anim.speed_scale = 1.0
 	state = State.NORMAL
 	_cooldown = COOLDOWN
 
@@ -231,18 +246,46 @@ func _face(dir: Vector3, delta: float) -> void:
 
 
 func _set_low(value: bool) -> void:
-	if value == _low:
+	_low = value or is_prone
+	var h := 0.7 if is_prone else (1.0 if value else 1.8)
+	if is_equal_approx(h, _height):
 		return
-	_low = value
-	var h := 1.0 if value else 1.8
+	_height = h
 	(shape.shape as CapsuleShape3D).height = h
 	shape.position.y = h / 2.0
-	pivot.position.y = 0.9 if value else 1.5
+	pivot.position.y = 0.6 if is_prone else (0.9 if value else 1.5)
+	$Visual/Model.position.y = -PRONE_DROP if is_prone else 0.0
+
+
+# --- Ramper ----------------------------------------------------------------
+
+func toggle_prone() -> void:
+	if state != State.NORMAL or not enabled:
+		return
+	is_prone = not is_prone
+
+
+func _state_prone(dir: Vector3, moving: bool, delta: float) -> void:
+	is_crouching = false
+	is_running = false
+	_set_low(true)
+	velocity.x = move_toward(velocity.x, dir.x * crawl_speed, ACCEL * delta)
+	velocity.z = move_toward(velocity.z, dir.z * crawl_speed, ACCEL * delta)
+	if moving:
+		_face(_move_dir, delta)
+	# Animation de nage, corps à plat au sol = reptation ; figée à l'arrêt.
+	play_loop(anim, "Swim_Fwd_Loop")
+	anim.speed_scale = 0.7 if moving else 0.0
 
 
 ## Point que le gardien doit voir pour repérer le joueur (plus bas quand il est baissé).
 func get_target_point() -> Vector3:
-	return global_position + Vector3(0, 0.6 if _low else 1.4, 0)
+	return global_position + Vector3(0, 0.3 if is_prone else (0.6 if _low else 1.4), 0)
+
+
+## Facilité à être repéré : couché au sol, le gardien met 2x plus de temps.
+func get_visibility() -> float:
+	return 0.5 if is_prone else 1.0
 
 
 ## Bruit fait par le joueur : 1 = course, 0.6 = roulade/glissade, 0 = silencieux.
