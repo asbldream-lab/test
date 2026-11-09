@@ -10,6 +10,9 @@ var _masks := Label.new()
 var _meter := Control.new()
 var _state := Label.new()
 var _help := Label.new()
+var _prompt: PanelContainer
+var _key := Label.new()
+var _prompt_text := Label.new()
 var _vis := 0.0 # valeur affichée (lissée)
 var _target := 0.0
 var _seen := false
@@ -75,6 +78,46 @@ void fragment() {
 	hp.add_child(_help)
 	add_child(hp)
 	hp.name = "Help"
+
+	# Invite d'action devant une vitrine : [touche] + texte, en bas au centre.
+	_prompt = _panel(0.75)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 12)
+	_prompt.add_child(row)
+	var keycap := PanelContainer.new()
+	var ks := StyleBoxFlat.new()
+	ks.bg_color = Color(0.92, 0.88, 0.8)
+	ks.border_color = GOLD
+	ks.set_border_width_all(2)
+	ks.border_width_bottom = 4 # relief de touche
+	ks.set_corner_radius_all(5)
+	ks.content_margin_left = 10
+	ks.content_margin_right = 10
+	ks.content_margin_top = 2
+	ks.content_margin_bottom = 2
+	keycap.add_theme_stylebox_override("panel", ks)
+	_key.add_theme_font_override("font", TITLE_FONT)
+	_key.add_theme_font_size_override("font_size", 18)
+	_key.add_theme_color_override("font_color", Color(0.12, 0.08, 0.05))
+	keycap.add_child(_key)
+	row.add_child(keycap)
+	_prompt_text.add_theme_font_size_override("font_size", 18)
+	_prompt_text.add_theme_color_override("font_color", Color(0.95, 0.92, 0.85))
+	_prompt_text.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	row.add_child(_prompt_text)
+	_prompt.hide()
+	add_child(_prompt)
+
+
+## Affiche « [touche] texte » ; texte vide = masque l'invite.
+func set_prompt(key: String, text: String) -> void:
+	_prompt.visible = not text.is_empty()
+	if not _prompt.visible:
+		return
+	_key.text = key
+	_prompt_text.text = text
+	_prompt.reset_size()
+	_prompt.position = Vector2(size.x / 2 - _prompt.size.x / 2, size.y * 0.7)
 
 
 func _fit() -> void:

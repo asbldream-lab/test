@@ -518,6 +518,12 @@ func _process(delta: float) -> void:
 		vis = maxf(vis, g.get_suspicion())
 		seen = seen or g.sees_player
 	_hud.set_visibility(vis, seen)
+	# Invite « Appuie sur E » quand un masque est à portée de main.
+	var vit: Node3D = player.nearest_vitrine() if player.state == MuseumPlayer.State.NORMAL and not _over else null
+	if vit:
+		_hud.set_prompt("PRENDRE" if _touch else "E", ("Touche pour récupérer : " if _touch else "Appuie pour récupérer : ") + Levels.MASKS[vit.mask_id][0])
+	else:
+		_hud.set_prompt("", "")
 	if _flash > 0.0:
 		_flash -= delta
 		if _flash <= 0.0 and not _over:
