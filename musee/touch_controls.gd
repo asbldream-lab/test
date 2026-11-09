@@ -13,6 +13,8 @@ var _joy_center := Vector2.ZERO
 var _joy_vec := Vector2.ZERO
 var _joy_finger := -1
 var _look_finger := -1
+var _look_last := Vector2.ZERO
+var _look_pending := Vector2.ZERO
 var _run_finger := -1
 var _crouch_on := false
 var _buttons := {}
@@ -76,6 +78,7 @@ func _input(event: InputEvent) -> void:
 				_update_joy(p)
 			elif _look_finger == -1:
 				_look_finger = i
+				_look_last = p
 		else:
 			if i == _joy_finger:
 				_joy_finger = -1
@@ -90,9 +93,23 @@ func _input(event: InputEvent) -> void:
 	elif event is InputEventScreenDrag:
 		if event.index == _joy_finger:
 			_update_joy(event.position)
-		elif event.index == _look_finger and player:
-			player.rotate_camera(event.relative * LOOK_SPEED)
+		elif event.index == _look_finger:
+			# Delta calculé nous-mêmes par doigt : event.relative est peu fiable
+			# en multi-touch sur navigateur (sauts quand deux doigts bougent).
+			var d: Vector2 = event.position - _look_last
+			_look_last = event.position
+			if d.length() < 150.0 * _u:
+				_look_pending += Vector2(d.x, d.y * 0.6) * LOOK_SPEED
 		get_viewport().set_input_as_handled()
+
+
+func _process(delta: float) -> void:
+	# Lissage : on applique une partie du mouvement en attente à chaque image.
+	if player == null or _look_pending.length() < 0.01:
+		return
+	var step := _look_pending * minf(1.0, 18.0 * delta)
+	_look_pending -= step
+	player.rotate_camera(step)
 
 
 func _update_joy(p: Vector2) -> void:
