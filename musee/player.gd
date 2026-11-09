@@ -210,7 +210,7 @@ func try_interact() -> void:
 	_move_dir = _move_dir.normalized() if _move_dir.length() > 0.01 else Vector3.RIGHT
 	_begin(State.ACTION)
 	_vitrine = v
-	_timer = play_once(anim, "Farm_Harvest" if is_crouching else "PickUp_Table")
+	_timer = play_once(anim, "PickUp_Table") # toujours debout ; il se ré-accroupit ensuite
 	_grab_at = _timer * 0.5
 
 
@@ -241,7 +241,7 @@ func nearest_vitrine() -> Node3D:
 func _begin(new_state: State) -> void:
 	state = new_state
 	is_running = false
-	_set_low(new_state != State.ACTION or is_crouching)
+	_set_low(new_state != State.ACTION) # se relève pour prendre un masque
 	visual.rotation.y = atan2(-_move_dir.x, -_move_dir.z)
 
 

@@ -37,6 +37,20 @@ func _ready() -> void:
 	_layout()
 
 
+func _notification(what: int) -> void:
+	# Pendant une pause (fiche du masque) ou une perte de focus, les relâchements de doigts
+	# ne nous parviennent pas : on remet la manette à zéro pour éviter une direction collée.
+	if what in [NOTIFICATION_PAUSED, NOTIFICATION_UNPAUSED, NOTIFICATION_APPLICATION_FOCUS_OUT, NOTIFICATION_WM_WINDOW_FOCUS_OUT]:
+		_reset_fingers()
+
+
+func _reset_fingers() -> void:
+	_joy_finger = -1
+	_look_finger = -1
+	_look_pending = Vector2.ZERO
+	_set_joy(Vector2.ZERO)
+
+
 func _exit_tree() -> void:
 	for a in ["move_left", "move_right", "move_forward", "move_back", "run", "crouch", "roll", "interact"]:
 		Input.action_release(a)
@@ -69,6 +83,8 @@ func _input(event: InputEvent) -> void:
 		var p: Vector2 = event.position
 		var i: int = event.index
 		if event.pressed:
+			if i == _joy_finger or i == _look_finger:
+				_reset_fingers()
 			if _buttons.roll.has_point(p):
 				player.try_roll()
 			elif _buttons.take.has_point(p):
@@ -163,7 +179,7 @@ func _draw() -> void:
 	_button("take", "PRENDRE", "(masque à portée !)" if near else "(près d'une vitrine)", near)
 	_button("restart", "REJOUER", "", false)
 	# Aide
-	_text("Vole les masques puis sors sans être vu", Vector2(s.x * 0.45, 50 * _u), 22)
+	_text("Atteins la porte verte - bonus : vole les masques", Vector2(s.x * 0.45, 50 * _u), 22)
 	_text("Glisse le doigt ici pour tourner la caméra", Vector2(s.x * 0.5, s.y * 0.3), 18, 0.45)
 	# Téléphone à la verticale
 	if s.y > s.x:

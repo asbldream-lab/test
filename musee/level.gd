@@ -56,7 +56,7 @@ func _ready() -> void:
 
 	$HUD/Aide.text = "ZQSD : marcher   Maj : courir (bruyant)   C : s'accroupir   C en courant : glissade\n" \
 		+ "Espace : roulade   E : prendre un masque   R : recommencer   Échap : libérer la souris\n" \
-		+ "Objectif : vole les %d masques puis sors par la porte, sans te faire voir." % _total_masks()
+		+ "Objectif : atteins la porte verte sans te faire voir. Bonus : vole les %d masques !" % _total_masks()
 	_counter.position = Vector2(16, 100) if not _touch else Vector2(16, 12)
 	_counter.add_theme_font_size_override("font_size", 24)
 	_counter.add_theme_constant_override("outline_size", 8)
@@ -210,10 +210,8 @@ func _on_mask_taken(total: int, vitrine: Node3D = null) -> void:
 	if vitrine:
 		# Laisse finir le geste de prise avant d'afficher la fiche du masque.
 		get_tree().create_timer(0.8).timeout.connect(_popup.show_mask.bind(vitrine))
-	# Porte rouge tant qu'il manque des masques, verte ensuite.
-	var open := total >= _total_masks()
-	_exit_mat.albedo_color = Color(0.2, 0.8, 0.3) if open else Color(0.8, 0.15, 0.1)
-	_exit_mat.emission = Color(0.1, 0.9, 0.3) if open else Color(0.9, 0.1, 0.05)
+	_exit_mat.albedo_color = Color(0.2, 0.8, 0.3) # sortie toujours ouverte
+	_exit_mat.emission = Color(0.1, 0.9, 0.3)
 
 
 func _show(text: String, color: Color, seconds := 0.0) -> void:
@@ -236,21 +234,21 @@ func _on_spotted() -> void:
 func _on_exit(body: Node3D) -> void:
 	if body != player or _over:
 		return
-	var missing := _total_masks() - player.masks
-	if missing > 0:
-		_show("Porte fermée : il manque %d masque%s !" % [missing, "s" if missing > 1 else ""], Color(1, 0.8, 0.3), 2.5)
-		return
 	for g in guards:
 		g.set_physics_process(false)
 	_won = true
-	var hint := "Touche l'écran" if _touch else "Appuie sur E"
-	if current < Levels.LEVELS.size() - 1:
-		_end("NIVEAU RÉUSSI !\n%s pour le niveau suivant" % hint, Color(0.3, 1, 0.4))
+	var score := "Masques volés : %d / %d" % [player.masks, _total_masks()]
+	var last := current >= Levels.LEVELS.size() - 1
+	if last:
+		_end("BRAVO ! Tu as traversé tout le musée !\n%s\nRetour au niveau 1..." % score, Color(1, 0.85, 0.3))
 	else:
-		_end("BRAVO ! Tu as dévalisé tout le musée !\n%s pour rejouer depuis le début" % hint, Color(1, 0.85, 0.3))
+		_end("NIVEAU %d RÉUSSI !\n%s\nNiveau suivant..." % [current + 1, score], Color(0.3, 1, 0.4))
 	if _pad:
 		_pad.hide()
-		_pad.set_process_input(false) # le prochain toucher passe au niveau suivant
+	# Téléportation automatique vers le niveau suivant.
+	await get_tree().create_timer(4.0 if last else 2.5).timeout
+	current = (current + 1) % Levels.LEVELS.size()
+	get_tree().reload_current_scene()
 
 
 func _end(text: String, color: Color) -> void:
@@ -262,10 +260,5 @@ func _end(text: String, color: Color) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if _won:
-		if event.is_action_pressed("interact") or event.is_action_pressed("ui_accept") \
-				or (event is InputEventScreenTouch and event.pressed):
-			current = (current + 1) % Levels.LEVELS.size()
-			get_tree().reload_current_scene()
-	elif event.is_action_pressed("restart"):
+	if not _won and event.is_action_pressed("restart"):
 		get_tree().reload_current_scene()
