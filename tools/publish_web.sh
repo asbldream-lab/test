@@ -11,6 +11,14 @@ rm -rf build/web && mkdir -p build/web
 "$GODOT" --headless --path . --export-release "Web" build/web/index.html 2>&1 | grep -E "ERROR|error" || true
 [ -f build/web/index.wasm ] || { echo "Export échoué"; exit 1; }
 
+# Anti-cache : GitHub Pages fait garder les fichiers 10 min par le navigateur.
+# On renomme le .pck avec son empreinte pour forcer le téléchargement de la nouvelle version.
+H="$(md5 -q build/web/index.pck | cut -c1-10)"
+mv build/web/index.pck "build/web/index-$H.pck"
+sed -i '' -e "s/\"executable\":\"index\"/\"executable\":\"index\",\"mainPack\":\"index-$H.pck\"/" \
+          -e "s/\"index.pck\":/\"index-$H.pck\":/" build/web/index.html
+grep -q "index-$H.pck" build/web/index.html || { echo "Anti-cache : index.html non modifié"; exit 1; }
+
 TMP="$(mktemp -d)"
 cp build/web/* "$TMP/" && touch "$TMP/.nojekyll"
 cd "$TMP"

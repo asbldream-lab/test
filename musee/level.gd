@@ -96,6 +96,7 @@ func _build() -> void:
 	_door(_data.entry, _mat(Color(0.3, 0.18, 0.1), 0.8))
 	_door(_data.exit, _exit_mat)
 	_exit_area(_data.exit)
+	_paintings(w, d)
 
 	var sun := DirectionalLight3D.new()
 	sun.rotation_degrees = Vector3(-65, 30, 0)
@@ -168,6 +169,62 @@ func _column(pos: Vector3, mat: Material) -> void:
 	body.add_child(mesh)
 	body.add_child(col)
 	add_child(body)
+
+
+## Tableaux sur les murs extérieurs (un tous les ~5 m), en évitant portes et cloisons.
+## Toiles abstraites générées (dégradés) ; couleurs différentes à chaque niveau.
+func _paintings(w: float, d: float) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 1234 + current
+	var frame_mat := _mat(Color(0.78, 0.6, 0.25), 0.35)
+	frame_mat.metallic = 0.6
+	var doors: Array[Vector2] = [Vector2(_data.entry[0], _data.entry[1]), Vector2(_data.exit[0], _data.exit[1])]
+	for side in ["N", "S", "E", "W"]:
+		var length := w if side in ["N", "S"] else d
+		var count := int(length / 5.0)
+		for i in count:
+			var t := (i + 0.5) / count * length - length / 2.0
+			var pos: Vector3 = {"N": Vector3(t, 2.2, -d / 2), "S": Vector3(t, 2.2, d / 2),
+				"E": Vector3(w / 2, 2.2, t), "W": Vector3(-w / 2, 2.2, t)}[side]
+			var flat := Vector2(pos.x, pos.z)
+			if doors.any(func(p): return flat.distance_to(p) < 2.2):
+				continue
+			if _data.walls.any(func(r): return absf(pos.x - r[0]) < r[2] / 2 + 1.2 and absf(pos.z - r[1]) < r[3] / 2 + 1.2):
+				continue
+			var inward := _inward(side)
+			var holder := Node3D.new()
+			holder.position = pos + inward * 0.04
+			holder.rotation.y = atan2(inward.x, inward.z) # +z local = vers la pièce
+			var size := Vector2(rng.randf_range(1.0, 1.8), rng.randf_range(0.8, 1.3))
+			var frame := MeshInstance3D.new()
+			frame.mesh = BoxMesh.new()
+			frame.mesh.size = Vector3(size.x, size.y, 0.06)
+			frame.material_override = frame_mat
+			holder.add_child(frame)
+			var canvas := MeshInstance3D.new()
+			canvas.mesh = BoxMesh.new()
+			canvas.mesh.size = Vector3(size.x - 0.16, size.y - 0.16, 0.01)
+			canvas.position.z = 0.035
+			canvas.material_override = _canvas(rng)
+			holder.add_child(canvas)
+			add_child(holder)
+
+
+func _canvas(rng: RandomNumberGenerator) -> StandardMaterial3D:
+	var g := Gradient.new()
+	g.set_color(0, Color.from_hsv(rng.randf(), rng.randf_range(0.4, 0.8), rng.randf_range(0.3, 0.9)))
+	g.set_color(1, Color.from_hsv(rng.randf(), rng.randf_range(0.4, 0.8), rng.randf_range(0.3, 0.9)))
+	g.add_point(rng.randf_range(0.3, 0.7), Color.from_hsv(rng.randf(), rng.randf_range(0.3, 0.9), rng.randf_range(0.4, 1.0)))
+	var tex := GradientTexture2D.new()
+	tex.gradient = g
+	tex.width = 64
+	tex.height = 64
+	tex.fill = rng.randi_range(0, 2) as GradientTexture2D.Fill # linéaire, radial ou carré
+	tex.fill_from = Vector2(rng.randf(), rng.randf())
+	tex.fill_to = Vector2(rng.randf(), rng.randf())
+	var m := _mat(Color.WHITE, 0.8)
+	m.albedo_texture = tex
+	return m
 
 
 ## Vecteur vers l'intérieur de la pièce pour un mur donné.
