@@ -104,7 +104,7 @@ func setup(level_index: int, level_count: int, level_name: String, touch: bool) 
 
 
 func set_masks(taken: int, total: int) -> void:
-	_masks.text = "◆  Masques volés : %d / %d" % [taken, total]
+	_masks.text = "◆  Masques récupérés : %d / %d" % [taken, total]
 
 
 ## v : 0 = invisible, 1 = repéré ; seen : un gardien te voit en ce moment.

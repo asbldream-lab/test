@@ -10,6 +10,7 @@ var _material := Label.new()
 var _story := Label.new()
 var _button := Button.new()
 var _t := 0.0
+var _note := Label.new()
 
 
 func _ready() -> void:
@@ -73,8 +74,7 @@ func _ready() -> void:
 	_material.add_theme_color_override("font_color", Color(0.8, 0.8, 0.8))
 	_story.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_story.add_theme_font_size_override("font_size", 17)
-	var note := Label.new()
-	note.text = "Masque inventé pour le jeu."
+	var note := _note
 	note.add_theme_font_size_override("font_size", 12)
 	note.add_theme_color_override("font_color", Color(0.6, 0.6, 0.6))
 	_button.text = "Continuer à jouer"
@@ -90,6 +90,8 @@ func show_mask(vitrine: Node3D) -> void:
 	_title.text = info[0]
 	_material.text = info[1]
 	_story.text = info[2]
+	_note.text = info[5] if info.size() > 5 else ""
+	_note.add_theme_color_override("font_color", Color(1, 0.45, 0.35) if "DOCUMENTÉ" in _note.text else Color(0.7, 0.7, 0.7))
 	for c in _pivot.get_children():
 		c.queue_free()
 	var copy: Node3D = vitrine.get_node("Mask").duplicate()

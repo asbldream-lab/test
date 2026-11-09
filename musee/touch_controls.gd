@@ -179,7 +179,7 @@ func _draw() -> void:
 	_button("take", "PRENDRE", "(masque à portée !)" if near else "(près d'une vitrine)", near)
 	_button("restart", "REJOUER", "", false)
 	# Aide
-	_text("Atteins la porte verte - bonus : vole les masques", Vector2(s.x * 0.45, 50 * _u), 22)
+	_text("Atteins la porte verte - bonus : récupère les masques", Vector2(s.x * 0.45, 50 * _u), 22)
 	_text("Glisse le doigt ici pour tourner la caméra", Vector2(s.x * 0.5, s.y * 0.3), 18, 0.45)
 	# Téléphone à la verticale
 	if s.y > s.x:

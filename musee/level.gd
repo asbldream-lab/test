@@ -534,7 +534,7 @@ func _on_exit(body: Node3D) -> void:
 	for g in guards:
 		g.set_physics_process(false)
 	_won = true
-	var score := "Masques volés : %d / %d" % [player.masks, _total_masks()]
+	var score := "Masques récupérés : %d / %d" % [player.masks, _total_masks()]
 	var last := current >= Levels.LEVELS.size() - 1
 	if last:
 		_end("BRAVO ! Tu as traversé tout le musée !\n%s\nRetour au niveau 1..." % score, Color(1, 0.85, 0.3))
